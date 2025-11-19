@@ -1,8 +1,7 @@
 # 🛍️ RummageBazaar  
 A modern marketplace for buying, selling, and donating quality pre-owned items.
 
-🌍 Live Deployment: **https://your-render-url-here**  
-(Replace the link above after deploying on Render)
+🌍 Live Deployment: **https://rummagebazaar-1.onrender.com**  
 
 ---
 
@@ -176,10 +175,6 @@ Copy code
 - Base64 images are sanitized
 - Admin actions restricted to admin ID
 
----
-
-## 📸 Screenshots (Optional)
-(Add screenshots here after deployment)
 
 ---
 
