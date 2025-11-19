@@ -30,7 +30,7 @@ export default function Home() {
         className="relative w-full h-[65vh] bg-cover bg-center flex items-center justify-center"
         style={{
           backgroundImage:
-            "url('https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTRGAqz-0b6oX3yVLyw2kfGjRLXlpczsMZ04g&s')",
+            "url('../assets/ourlogo.png')",
         }}
       >
         <div className="absolute inset-0 bg-black/50"></div>
