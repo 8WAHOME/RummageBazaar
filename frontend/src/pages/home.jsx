@@ -30,7 +30,7 @@ export default function Home() {
         className="relative w-full h-[65vh] bg-cover bg-center flex items-center justify-center"
         style={{
           backgroundImage:
-            "url('../assets/ourlogo.png')",
+            "url('../assets/kalogo.png')",
         }}
       >
         <div className="absolute inset-0 bg-black/50"></div>
