@@ -25,10 +25,7 @@ app.use("/api/users", userRoutes);
 
 app.use(
   cors({
-    origin: [
-      "http://localhost:5173",
-      "https://rummagebazaar-frontend.onrender.com",
-    ],
+    origin: "*",
     credentials: true,
   })
 );
