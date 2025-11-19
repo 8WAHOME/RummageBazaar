@@ -22,6 +22,17 @@ app.use(clerkMiddleware());
 app.use("/api/products", productRoutes);
 app.use("/api/users", userRoutes);
 
+
+app.use(
+  cors({
+    origin: [
+      "http://localhost:5173",
+      "https://rummagebazaar-frontend.onrender.com",
+    ],
+    credentials: true,
+  })
+);
+
 // Base route
 app.get("/", (req, res) => {
   res.send("RummageBazaar API is running...");
