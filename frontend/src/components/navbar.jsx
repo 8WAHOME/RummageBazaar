@@ -48,11 +48,14 @@ export default function Navbar() {
             </Link>
           </div>
 
-          {/* Right — Auth */}
-          <div className="flex items-center gap-3">
-            <SignedIn>
-              <UserButton afterSignOutUrl="/" />
-            </SignedIn>
+             {/* Right — Auth */}
+            <div className="flex items-center gap-3">
+              <SignedIn>
++               <Link to="/dashboard" className="px-3 py-1 rounded-md border border-emerald-600 text-emerald-600 hover:bg-emerald-50">
++                 Dashboard
++               </Link>
+                <UserButton afterSignOutUrl="/" />
+              </SignedIn>
 
             <SignedOut>
               <Link

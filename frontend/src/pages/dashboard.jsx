@@ -136,7 +136,7 @@ export default function Dashboard() {
 
                   <div>
                     <button
-                      onClick={() => removeListing(p._1d || p._id)}
+                      onClick={() => removeListing(p._id || p._id)}
                       disabled={busyId === p._id}
                       className="px-3 py-1 bg-gray-50 rounded"
                     >
