@@ -1,11 +1,12 @@
 import { Link, useNavigate } from "react-router-dom";
-import { UserButton, SignedIn, SignedOut, useUser } from "@clerk/clerk-react";
+import { SignedIn, SignedOut, useUser, useClerk } from "@clerk/clerk-react";
 import { useEffect } from "react";
 import { api } from "../utils/api";
 
 export default function Navbar() {
   const navigate = useNavigate();
   const { user } = useUser();
+  const clerk = useClerk();
 
   // Sync Clerk user to MongoDB 
   useEffect(() => {
@@ -48,14 +49,24 @@ export default function Navbar() {
             </Link>
           </div>
 
-             {/* Right — Auth */}
-            <div className="flex items-center gap-3">
-              <SignedIn>
-+               <Link to="/dashboard" className="px-3 py-1 rounded-md border border-emerald-600 text-emerald-600 hover:bg-emerald-50">
-+                 Dashboard
-+               </Link>
-                <UserButton afterSignOutUrl="/" />
-              </SignedIn>
+          {/* Right — Auth */}
+          <div className="flex items-center gap-3">
+            <SignedIn>
+              <Link
+                to="/dashboard"
+                className="px-3 py-1 rounded-md border border-emerald-600 text-emerald-600 hover:bg-emerald-50"
+              >
+                Dashboard
+              </Link>
+
+              <button
+                onClick={() => clerk?.signOut?.().catch(() => {})}
+                className="ml-2 px-3 py-1 rounded-md border border-emerald-600 text-emerald-600 hover:bg-emerald-50"
+                aria-label="Sign out"
+              >
+                Sign out
+              </button>
+            </SignedIn>
 
             <SignedOut>
               <Link
