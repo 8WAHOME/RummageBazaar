@@ -22,11 +22,13 @@ export default function CreateListing() {
     }
   }, [editing, navigate]);
 
+  // Form state - this is the object that stores all the form field values
   const [form, setForm] = useState({
     title: "",
     description: "",
     price: "",
     sellerPhone: "",
+    countryCode: "+254", // Added country code with Kenya as default
     category: "",
     condition: "good",
     location: "",
@@ -140,13 +142,30 @@ export default function CreateListing() {
 
           <div>
             <label className="block text-sm font-medium mb-1">Seller Phone</label>
-            <input
-              name="sellerPhone"
-              value={form.sellerPhone}
-              onChange={onChange}
-              required
-              className="w-full border rounded px-3 py-2"
-            />
+            <div className="flex">
+              <select 
+                name="countryCode"
+                value={form.countryCode}
+                onChange={onChange}
+                className="border rounded-l px-3 py-2 bg-gray-100"
+              >
+                <option value="+254">+254 (KE)</option>
+                <option value="+255">+255 (TZ)</option>
+                <option value="+256">+256 (UG)</option>
+                <option value="+257">+257 (BI)</option>
+                <option value="+250">+250 (RW)</option>
+                <option value="+211">+211 (SS)</option>
+              </select>
+              <input
+                name="sellerPhone"
+                value={form.sellerPhone}
+                onChange={onChange}
+                required
+                placeholder="712345678"
+                className="w-full border rounded-r px-3 py-2"
+              />
+            </div>
+            <p className="text-xs text-gray-500 mt-1">Enter phone number without country code</p>
           </div>
         </div>
 

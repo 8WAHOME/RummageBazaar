@@ -4,7 +4,12 @@ import { SignIn } from "@clerk/clerk-react";
 export default function Login() {
   return (
     <div className="max-w-md mx-auto p-6">
-      <SignIn routing="path" path="/sign-in" />
+      <SignIn 
+        routing="path" 
+        path="/sign-in" 
+        redirectUrl="/dashboard"
+        signUpUrl="/sign-up"
+      />
     </div>
   );
 }

@@ -16,6 +16,7 @@ export default function ProductDetail() {
   const [loading, setLoading] = useState(true);
   const [mainIndex, setMainIndex] = useState(0);
   const [busy, setBusy] = useState(false);
+  const [selectedCountryCode, setSelectedCountryCode] = useState("+254");
 
   useEffect(() => {
     (async () => {
@@ -36,9 +37,37 @@ export default function ProductDetail() {
   const isDonation = Number(item.price) === 0 || item.isDonation;
   const isSold = item.status === "sold" || item.sold === true;
 
-  const whatsappHref = item.sellerPhone
-    ? `https://wa.me/${item.sellerPhone}?text=${encodeURIComponent(
-        `Hi! I'm interested in your product: ${item.title} (KSH ${item.price}). Is it still available?`
+  // Format phone number with country code
+  const formatPhoneNumber = (phone) => {
+    if (!phone) return "";
+    
+    // Remove any existing country code and non-digit characters
+    const cleanPhone = phone.replace(/\D/g, '');
+    
+    // If phone already starts with country code, use as is
+    if (cleanPhone.startsWith('254')) {
+      return `+${cleanPhone}`;
+    }
+    
+    // If phone starts with 0, remove it and add country code
+    if (cleanPhone.startsWith('0')) {
+      return `${selectedCountryCode}${cleanPhone.slice(1)}`;
+    }
+    
+    // If phone is 9 digits (typical Kenyan number without 0), add country code
+    if (cleanPhone.length === 9) {
+      return `${selectedCountryCode}${cleanPhone}`;
+    }
+    
+    // Default: just add country code
+    return `${selectedCountryCode}${cleanPhone}`;
+  };
+
+  const formattedPhone = formatPhoneNumber(item.sellerPhone);
+  
+  const whatsappHref = formattedPhone
+    ? `https://wa.me/${formattedPhone.replace('+', '')}?text=${encodeURIComponent(
+        `Hi! I'm interested in your product: ${item.title} (${isDonation ? "FREE" : `KSH ${item.price}`}). Is it still available?`
       )}`
     : null;
 
@@ -112,9 +141,30 @@ export default function ProductDetail() {
 
               <div className="flex items-center gap-3">
                 {!isSold && whatsappHref && (
-                  <a href={whatsappHref} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded">
-                    <FaWhatsapp /> Chat Seller
-                  </a>
+                  <div className="flex flex-col gap-2">
+                    <div className="flex items-center gap-2">
+                      <select 
+                        value={selectedCountryCode}
+                        onChange={(e) => setSelectedCountryCode(e.target.value)}
+                        className="text-sm border rounded px-2 py-1 bg-gray-100"
+                      >
+                        <option value="+254">+254 (KE)</option>
+                        <option value="+255">+255 (TZ)</option>
+                        <option value="+256">+256 (UG)</option>
+                        <option value="+257">+257 (BI)</option>
+                        <option value="+250">+250 (RW)</option>
+                        <option value="+211">+211 (SS)</option>
+                        <option value="+1">+1 (US/CA)</option>
+                        <option value="+44">+44 (UK)</option>
+                        <option value="+91">+91 (IN)</option>
+                        <option value="+86">+86 (CN)</option>
+                      </select>
+                      <a href={whatsappHref} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded">
+                        <FaWhatsapp /> Chat Seller
+                      </a>
+                    </div>
+                    <p className="text-xs text-gray-500">Phone: {formattedPhone}</p>
+                  </div>
                 )}
                 {isSold && <span className="text-sm bg-red-100 px-3 py-1 rounded text-red-700 font-semibold">SOLD</span>}
               </div>
@@ -124,7 +174,7 @@ export default function ProductDetail() {
               <div><strong>Category:</strong> {item.category}</div>
               <div><strong>Condition:</strong> {item.condition}</div>
               <div><strong>Location:</strong> {item.location || "Not specified"}</div>
-              <div><strong>Seller Phone:</strong> {item.sellerPhone}</div>
+              <div><strong>Seller Phone:</strong> {formattedPhone}</div>
             </div>
 
             <div className="mt-6 flex gap-3">
