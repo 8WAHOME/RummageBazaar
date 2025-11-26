@@ -1,4 +1,4 @@
-import { Routes, Route } from "react-router-dom";
+import { HashRouter as Router, Routes, Route } from "react-router-dom";
 import { useEffect } from "react";
 import { api } from "./utils/api.js";
 import { SignedIn, SignedOut, RedirectToSignIn, useUser } from "@clerk/clerk-react";
@@ -31,7 +31,7 @@ function App() {
   }, [user]);
 
   return (
-    <>
+    <Router>
       {/* Navigation Bar */}
       <Navbar />
 
@@ -75,7 +75,7 @@ function App() {
 
       {/* Footer */}
       <Footer />
-    </>
+    </Router>
   );
 }
 
