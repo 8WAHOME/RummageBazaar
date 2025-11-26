@@ -1,10 +1,14 @@
 import React from "react";
 import { SignIn } from "@clerk/clerk-react";
-import { Navigate } from "react-router-dom";
+import { Navigate, useLocation } from "react-router-dom";
 import { useUser } from "@clerk/clerk-react";
 
 export default function Login() {
   const { isSignedIn } = useUser();
+  const location = useLocation();
+  
+  // Get message from navigation state (passed from SSO callback)
+  const message = location.state?.message;
 
   // If user is already signed in, redirect to home page
   if (isSignedIn) {
@@ -18,12 +22,28 @@ export default function Login() {
           <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
             Sign in to your account
           </h2>
+          {message && (
+            <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+              <p className="text-sm text-blue-800 text-center">{message}</p>
+            </div>
+          )}
+          <p className="mt-2 text-center text-sm text-gray-600">
+            Don't have an account?{" "}
+            <a 
+              href="/sign-up" 
+              className="font-medium text-emerald-600 hover:text-emerald-500"
+            >
+              Sign up here
+            </a>
+          </p>
         </div>
         <SignIn 
           routing="path" 
           path="/sign-in" 
           redirectUrl="/"
           signUpUrl="/sign-up"
+          afterSignInUrl="/"
+          afterSignUpUrl="/"
         />
       </div>
     </div>
