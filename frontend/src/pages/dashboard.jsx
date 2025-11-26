@@ -133,7 +133,7 @@ export default function Dashboard() {
                       {busyId === p._id ? "..." : p.status === "sold" ? "SOLD" : "Mark as Sold"}
                     </button>
                   </div>
-
+{/* 
                   <div>
                     <button
                       onClick={() => removeListing(p._id || p._id)}
@@ -142,7 +142,7 @@ export default function Dashboard() {
                     >
                       Delete
                     </button>
-                  </div>
+                  </div> */}
                 </div>
               </div>
             ))}
@@ -151,7 +151,7 @@ export default function Dashboard() {
       </section>
 
       <section className="mt-8">
-        <h3 className="text-xl mb-3">Orders (placeholder)</h3>
+        <h3 className="text-xl mb-3">To maintain listing quality, Sellers are not allowed to <b>Edit</b> or <b>Delete</b></h3>
         <div className="bg-white rounded p-4 shadow text-sm text-gray-600">
           Orders and messages will appear here as the system evolves. (Placeholder)
         </div>
