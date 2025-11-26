@@ -37,17 +37,16 @@ export default function Home() {
 
         <div className="relative z-10 text-center text-gray px-6 max-w-2xl">
           <h1 className="text-5xl font-extrabold drop-shadow-lg">
-            Buy. Donate. Sell. Save. Sustain.
+            Welcome to RummageBazaar
           </h1>
           <p className="mt-4 text-xl opacity-90">
-            Discover great deals and give pre-loved items a second life.
+            <h2>Discover great deals and give pre-loved items a second life.</h2>
           </p>
 
-         {/* REMOVED THE BROWSE LINK THAT WAS CAUSING 404 */}
-          <div className="mt-8">
-            <p className="text-white text-lg">
-              Use the navigation menu above to browse listings
-            </p>
+         <div className="relative z-10 text-center text-gray px-6 max-w-2xl">
+          <h1 className="text-5xl font-extrabold drop-shadow-lg">
+            Buy. Donate. Sell. Save. Sustain.
+          </h1>
           </div>
         </div>
       </section>
