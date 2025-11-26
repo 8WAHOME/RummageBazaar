@@ -1,4 +1,4 @@
-import { HashRouter as Router, Routes, Route } from "react-router-dom";
+import { Routes, Route, Navigate } from "react-router-dom";
 import { useEffect } from "react";
 import { api } from "./utils/api.js";
 import { SignedIn, SignedOut, RedirectToSignIn, useUser } from "@clerk/clerk-react";
@@ -31,7 +31,7 @@ function App() {
   }, [user]);
 
   return (
-    <Router>
+    <>
       {/* Navigation Bar */}
       <Navbar />
 
@@ -47,7 +47,7 @@ function App() {
           {/* AUTH PAGES */}
           <Route path="/sign-in" element={<SignInPage />} />
           <Route path="/sign-up" element={<SignUpPage />} />
-          <Route path="/sign-in/sso-callback" element={<SignInPage />} />
+          <Route path="/sign-in/*" element={<SignInPage />} />
 
           {/* PROTECTED ROUTES */}
           <Route
@@ -68,14 +68,14 @@ function App() {
             }
           />
 
-          {/* 404 */}
+          {/* CATCH-ALL ROUTE - This is important for SPA */}
           <Route path="*" element={<NotFound />} />
         </Routes>
       </main>
 
       {/* Footer */}
       <Footer />
-    </Router>
+    </>
   );
 }
 
