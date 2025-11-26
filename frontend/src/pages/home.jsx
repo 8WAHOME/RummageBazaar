@@ -43,12 +43,12 @@ export default function Home() {
             Discover great deals and give pre-loved items a second life.
           </p>
 
-          <a
-            href="/browse"
-            className="mt-8 inline-block bg-green-500 hover:bg-green-600 transition text-white px-8 py-3 rounded-full text-lg font-medium shadow-lg"
-          >
-            Browse Listings
-          </a>
+         {/* REMOVED THE BROWSE LINK THAT WAS CAUSING 404 */}
+          <div className="mt-8">
+            <p className="text-white text-lg">
+              Use the navigation menu above to browse listings
+            </p>
+          </div>
         </div>
       </section>
 
