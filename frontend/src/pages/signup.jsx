@@ -7,7 +7,7 @@ export default function Signup() {
       <SignUp 
         routing="path" 
         path="/sign-up" 
-        redirectUrl="/dashboard"
+        redirectUrl="/"  // Changed from /dashboard to /
         signInUrl="/sign-in"
       />
     </div>
