@@ -3,7 +3,7 @@ import React, { useEffect, useState } from "react";
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { api } from "../utils/api.js";
 import Loader from "../components/loader.jsx";
-import { FaWhatsapp, FaTag, FaMapMarkerAlt, FaUser } from "react-icons/fa";
+import { FaWhatsapp, FaTag, FaMapMarkerAlt, FaUser, FaPhone } from "react-icons/fa";
 import { useClerk } from "@clerk/clerk-react";
 
 export default function ProductDetail() {
@@ -16,17 +16,12 @@ export default function ProductDetail() {
   const [loading, setLoading] = useState(true);
   const [mainIndex, setMainIndex] = useState(0);
   const [busy, setBusy] = useState(false);
-  const [selectedCountryCode, setSelectedCountryCode] = useState("+254");
 
   useEffect(() => {
     (async () => {
       try {
         const data = await api(`/products/${id}`, "GET");
         setItem(data);
-        // Set country code from item if available, otherwise default to +254
-        if (data.countryCode) {
-          setSelectedCountryCode(data.countryCode);
-        }
       } catch (err) {
         console.error(err);
       } finally {
@@ -42,35 +37,30 @@ export default function ProductDetail() {
   const isSold = item.status === "sold" || item.sold === true;
   const isPending = item.status === "pending";
 
-  // Robust phone number formatting
+  // Use stored country code or default to +254
+  const countryCode = item.countryCode || "+254";
+
+  // Robust phone number formatting using stored country code
   const formatPhoneNumber = (phone, countryCode = "+254") => {
     if (!phone) return "";
     
-    // Remove any non-digit characters
     const cleanPhone = phone.replace(/\D/g, '');
-    
     if (!cleanPhone) return "";
     
-    // Handle different phone number formats
     let formattedNumber = cleanPhone;
     
-    // If phone starts with country code (without +), use as is
     if (cleanPhone.startsWith('254') && cleanPhone.length === 12) {
       formattedNumber = cleanPhone;
     }
-    // If phone starts with 0, remove it and add country code
     else if (cleanPhone.startsWith('0') && cleanPhone.length === 10) {
       formattedNumber = countryCode.replace('+', '') + cleanPhone.slice(1);
     }
-    // If phone is 9 digits (typical East African number without 0)
     else if (cleanPhone.length === 9) {
       formattedNumber = countryCode.replace('+', '') + cleanPhone;
     }
-    // If phone already includes country code with +
     else if (cleanPhone.startsWith('254') && cleanPhone.length === 12) {
       formattedNumber = cleanPhone;
     }
-    // Default case - just use the cleaned number
     else {
       formattedNumber = countryCode.replace('+', '') + cleanPhone;
     }
@@ -78,7 +68,7 @@ export default function ProductDetail() {
     return `+${formattedNumber}`;
   };
 
-  const formattedPhone = formatPhoneNumber(item.sellerPhone, selectedCountryCode);
+  const formattedPhone = formatPhoneNumber(item.sellerPhone, countryCode);
   
   const whatsappHref = formattedPhone
     ? `https://wa.me/${formattedPhone.replace('+', '')}?text=${encodeURIComponent(
@@ -215,44 +205,32 @@ export default function ProductDetail() {
                 <strong className="w-20">Location:</strong>
                 <span className="ml-2">{item.location || "Not specified"}</span>
               </div>
+              {formattedPhone && (
+                <div className="flex items-center text-sm text-gray-700">
+                  <FaPhone className="mr-2 text-gray-400" />
+                  <strong className="w-20">Phone:</strong>
+                  <span className="ml-2">{formattedPhone}</span>
+                </div>
+              )}
             </div>
 
-            {/* Contact Section */}
+            {/* Contact Section - Simplified without country code selection */}
             {!isSold && formattedPhone && (
               <div className="mb-6 p-4 bg-blue-50 rounded-lg">
                 <h3 className="font-semibold text-gray-900 mb-3">Contact Seller</h3>
-                <div className="space-y-3">
-                  <div className="flex flex-col sm:flex-row sm:items-center gap-2">
-                    <label className="text-sm text-gray-700 font-medium">Country Code:</label>
-                    <select 
-                      value={selectedCountryCode}
-                      onChange={(e) => setSelectedCountryCode(e.target.value)}
-                      className="flex-1 text-sm border border-gray-300 rounded px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                    >
-                      <option value="+254">+254 (Kenya)</option>
-                      <option value="+255">+255 (Tanzania)</option>
-                      <option value="+256">+256 (Uganda)</option>
-                      <option value="+257">+257 (Burundi)</option>
-                      <option value="+250">+250 (Rwanda)</option>
-                      <option value="+211">+211 (South Sudan)</option>
-                      <option value="+1">+1 (US/Canada)</option>
-                      <option value="+44">+44 (UK)</option>
-                      <option value="+91">+91 (India)</option>
-                      <option value="+86">+86 (China)</option>
-                    </select>
-                  </div>
-                  <div className="flex flex-col sm:flex-row sm:items-center gap-2">
-                    <span className="text-sm text-gray-700 font-medium">Phone:</span>
-                    <span className="flex-1 text-sm bg-white px-3 py-2 rounded border border-gray-300">
-                      {formattedPhone}
-                    </span>
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm text-gray-600">Phone: {formattedPhone}</p>
+                      <p className="text-xs text-gray-500 mt-1">Country: {countryCode}</p>
+                    </div>
                   </div>
                   {whatsappHref && (
                     <a 
                       href={whatsappHref} 
                       target="_blank" 
                       rel="noopener noreferrer" 
-                      className="inline-flex items-center justify-center gap-2 bg-green-600 hover:bg-green-700 text-white px-6 py-3 rounded-lg font-semibold transition-colors duration-200 w-full sm:w-auto"
+                      className="inline-flex items-center justify-center gap-2 bg-green-600 hover:bg-green-700 text-white px-6 py-3 rounded-lg font-semibold transition-colors duration-200 w-full"
                     >
                       <FaWhatsapp className="text-xl" /> 
                       Chat on WhatsApp

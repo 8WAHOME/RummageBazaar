@@ -4,13 +4,38 @@ import { FaWhatsapp } from "react-icons/fa";
 
 /**
  * Props:
- *  - item: { _id, title, price, images, category, sellerPhone, status, isDonation }
+ *  - item: { _id, title, price, images, category, sellerPhone, countryCode, status, isDonation }
  */
 export default function ProductCard({ item }) {
   const isSold = item?.status === "sold" || item?.sold === true;
   const isDonation = item?.isDonation || Number(item?.price || 0) === 0;
-  const whatsappHref = item?.sellerPhone
-    ? `https://wa.me/${item.sellerPhone}?text=${encodeURIComponent(`Hi! I'm interested in "${item.title}" listed for KSH ${item.price}. Is it still available?`)}`
+  
+  // Format phone number with stored country code
+  const formatPhoneForWhatsApp = (phone, countryCode = "+254") => {
+    if (!phone) return null;
+    
+    const cleanPhone = phone.replace(/\D/g, '');
+    let formattedNumber = cleanPhone;
+    
+    if (cleanPhone.startsWith('0') && cleanPhone.length === 10) {
+      formattedNumber = countryCode.replace('+', '') + cleanPhone.slice(1);
+    }
+    else if (cleanPhone.length === 9) {
+      formattedNumber = countryCode.replace('+', '') + cleanPhone;
+    }
+    else if (cleanPhone.startsWith('254') && cleanPhone.length === 12) {
+      formattedNumber = cleanPhone;
+    }
+    else {
+      formattedNumber = countryCode.replace('+', '') + cleanPhone;
+    }
+    
+    return `+${formattedNumber}`;
+  };
+
+  const formattedPhone = formatPhoneForWhatsApp(item?.sellerPhone, item?.countryCode || "+254");
+  const whatsappHref = formattedPhone
+    ? `https://wa.me/${formattedPhone}?text=${encodeURIComponent(`Hi! I'm interested in "${item.title}" listed for ${isDonation ? "FREE" : `KSH ${item.price}`}. Is it still available?`)}`
     : null;
 
   return (
@@ -37,11 +62,20 @@ export default function ProductCard({ item }) {
         </div>
 
         <div className="flex items-center justify-between">
-          <div className="text-xl font-bold text-gray-900">{isDonation ? "FREE" : `KSH ${Number(item.price || 0).toLocaleString()}`}</div>
+          <div className="text-xl font-bold text-gray-900">
+            {isDonation ? "FREE" : `KSH ${Number(item.price || 0).toLocaleString()}`}
+          </div>
           <div className="flex items-center gap-2">
-            <Link to={`/products/${item._id}`} className="px-3 py-1 bg-blue-600 text-white rounded-md hover:bg-blue-700">View</Link>
+            <Link to={`/products/${item._id}`} className="px-3 py-1 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors">
+              View
+            </Link>
             {whatsappHref && !isSold && (
-              <a href={whatsappHref} target="_blank" rel="noreferrer" className="px-3 py-1 bg-emerald-500 text-white rounded-md hover:bg-emerald-600 flex items-center gap-2">
+              <a 
+                href={whatsappHref} 
+                target="_blank" 
+                rel="noreferrer" 
+                className="px-3 py-1 bg-emerald-500 text-white rounded-md hover:bg-emerald-600 flex items-center gap-2 transition-colors"
+              >
                 <FaWhatsapp />
                 <span className="hidden sm:inline">Chat</span>
               </a>

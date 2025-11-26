@@ -47,6 +47,12 @@ function App() {
           {/* AUTH PAGES */}
           <Route path="/sign-in/*" element={<SignInPage />} />
           <Route path="/sign-up/*" element={<SignUpPage />} />
+          
+          {/* CLERK SSO CALLBACK ROUTE */}
+          <Route 
+            path="/sign-in/sso-callback" 
+            element={<Navigate to="/" replace />} 
+          />
 
           {/* PROTECTED ROUTES */}
           <Route
