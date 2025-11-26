@@ -1,12 +1,13 @@
 import { Link, useNavigate } from "react-router-dom";
 import { SignedIn, SignedOut, useUser, useClerk } from "@clerk/clerk-react";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { api } from "../utils/api";
 
 export default function Navbar() {
   const navigate = useNavigate();
   const { user } = useUser();
   const clerk = useClerk();
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
 
   // Sync Clerk user to MongoDB 
   useEffect(() => {
@@ -20,6 +21,15 @@ export default function Navbar() {
     }).catch(() => {});
   }, [user]);
 
+  const handleSignOut = async () => {
+    try {
+      await clerk.signOut();
+      navigate("/"); // Redirect to home after sign out
+    } catch (error) {
+      console.error("Sign out error:", error);
+    }
+  };
+
   return (
     <nav className="bg-white border-b sticky top-0 z-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -27,30 +37,32 @@ export default function Navbar() {
           
           {/* Left — Logo */}
           <div className="flex items-center gap-6">
-            <Link to="/" className="flex items-center gap-3">
+            <Link to="/" className="flex items-center gap-3" onClick={() => setIsMenuOpen(false)}>
               <div className="w-10 h-10 bg-emerald-600 rounded-md flex items-center justify-center text-white font-bold">
                 RB
               </div>
-              <div className="text-lg font-semibold text-emerald-700">
+              <div className="text-lg font-semibold text-emerald-700 hidden sm:block">
                 RummageBazaar
               </div>
             </Link>
           </div>
 
-          {/* Middle — Links */}
+          {/* Middle — Desktop Links */}
           <div className="hidden md:flex items-center gap-6 text-gray-700">
             <Link to="/" className="hover:text-emerald-600">Home</Link>
             <Link to="/browse" className="hover:text-emerald-600">Browse</Link>
-            <Link
-              to="/create"
-              className="bg-emerald-600 text-white px-3 py-1 rounded-md hover:bg-emerald-700"
-            >
-              Sell Item
-            </Link>
+            <SignedIn>
+              <Link
+                to="/create"
+                className="bg-emerald-600 text-white px-3 py-1 rounded-md hover:bg-emerald-700"
+              >
+                Sell Item
+              </Link>
+            </SignedIn>
           </div>
 
-          {/* Right — Auth */}
-          <div className="flex items-center gap-3">
+          {/* Right — Desktop Auth */}
+          <div className="hidden md:flex items-center gap-3">
             <SignedIn>
               <Link
                 to="/dashboard"
@@ -60,7 +72,7 @@ export default function Navbar() {
               </Link>
 
               <button
-                onClick={() => clerk?.signOut?.().catch(() => {})}
+                onClick={handleSignOut}
                 className="ml-2 px-3 py-1 rounded-md border border-emerald-600 text-emerald-600 hover:bg-emerald-50"
                 aria-label="Sign out"
               >
@@ -78,7 +90,84 @@ export default function Navbar() {
             </SignedOut>
           </div>
 
+          {/* Mobile Menu Button */}
+          <div className="md:hidden flex items-center">
+            <button
+              onClick={() => setIsMenuOpen(!isMenuOpen)}
+              className="text-gray-700 hover:text-emerald-600 p-2"
+            >
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                {isMenuOpen ? (
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                ) : (
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+                )}
+              </svg>
+            </button>
+          </div>
         </div>
+
+        {/* Mobile Menu */}
+        {isMenuOpen && (
+          <div className="md:hidden border-t border-gray-200 py-4">
+            <div className="flex flex-col space-y-4">
+              {/* All navigation items for mobile */}
+              <Link 
+                to="/" 
+                className="text-gray-700 hover:text-emerald-600 py-2"
+                onClick={() => setIsMenuOpen(false)}
+              >
+                Home
+              </Link>
+              
+              <Link 
+                to="/browse" 
+                className="text-gray-700 hover:text-emerald-600 py-2"
+                onClick={() => setIsMenuOpen(false)}
+              >
+                Browse
+              </Link>
+
+              <SignedIn>
+                <Link 
+                  to="/create" 
+                  className="text-gray-700 hover:text-emerald-600 py-2"
+                  onClick={() => setIsMenuOpen(false)}
+                >
+                  Sell Item
+                </Link>
+
+                <Link 
+                  to="/dashboard" 
+                  className="text-gray-700 hover:text-emerald-600 py-2"
+                  onClick={() => setIsMenuOpen(false)}
+                >
+                  Dashboard
+                </Link>
+
+                <button
+                  onClick={() => {
+                    handleSignOut();
+                    setIsMenuOpen(false);
+                  }}
+                  className="text-left text-gray-700 hover:text-emerald-600 py-2"
+                >
+                  Sign out
+                </button>
+              </SignedIn>
+
+              <SignedOut>
+                <Link 
+                  to="/sign-in" 
+                  className="text-gray-700 hover:text-emerald-600 py-2"
+                  onClick={() => setIsMenuOpen(false)}
+                >
+                  Login
+                </Link>
+              </SignedOut>
+            </div>
+          </div>
+        )}
       </div>
     </nav>
   );

@@ -33,7 +33,7 @@ export default function Home() {
             "url('../assets/kalogo.png')",
         }}
       >
-        <div className="absolute inset-0 bg-black/50"></div>
+        {/* <div className="absolute inset-0 bg-black/50"></div>
 
         <div className="relative z-10 text-center text-gray px-6 max-w-2xl">
           <h1 className="text-5xl font-extrabold drop-shadow-lg">
@@ -48,7 +48,7 @@ export default function Home() {
             Buy. Donate. Sell. Save. Sustain.
           </h1>
           </div>
-        </div>
+        </div> */}
       </section>
 
       {/* ⭐ FEATURES / VALUE PROPOSITION */}
