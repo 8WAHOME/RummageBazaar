@@ -14,6 +14,7 @@ export default function Home() {
       setItems(Array.isArray(data) ? data : []);
     } catch (err) {
       console.error("Home load error", err);
+      setItems([]); // Ensure items is always an array
     }
     setLoading(false);
   }
@@ -25,29 +26,22 @@ export default function Home() {
   return (
     <div className="w-full">
 
-      {/* ⭐ HERO SECTION */}
+       {/* ⭐ HERO SECTION - Improved for mobile */}
       <section
-        className="relative w-full h-[65vh] bg-cover bg-center flex items-center justify-center"
+        className="relative w-full h-[50vh] md:h-[65vh] bg-cover bg-center flex items-center justify-center"
         style={{
-          backgroundImage:
-            "url('../assets/kalogo.png')",
+          backgroundImage: "url('../assets/kalogo.png')",
         }}
       >
-        {/* <div className="absolute inset-0 bg-black/50"></div>
-
-        <div className="relative z-10 text-center text-gray px-6 max-w-2xl">
-          <h1 className="text-5xl font-extrabold drop-shadow-lg">
-            Welcome to RummageBazaar
+        {/* <div className="absolute inset-0 bg-black/20"></div>
+        
+        <div className="relative z-10 text-center text-white px-4 max-w-2xl">
+          <h1 className="text-3xl md:text-5xl font-extrabold mb-4 drop-shadow-lg">
+            RummageBazaar
           </h1>
-          <p className="mt-4 text-xl opacity-90">
-            <h2>Discover great deals and give pre-loved items a second life.</h2>
-          </p>
-
-         <div className="relative z-10 text-center text-gray px-6 max-w-2xl">
-          <h1 className="text-5xl font-extrabold drop-shadow-lg">
+          <p className="text-lg md:text-xl opacity-90 drop-shadow-md">
             Buy. Donate. Sell. Save. Sustain.
-          </h1>
-          </div>
+          </p>
         </div> */}
       </section>
 
@@ -71,7 +65,7 @@ export default function Home() {
             key={f.title}
             className="bg-white shadow-sm border rounded-xl p-6 hover:shadow-md transition"
           >
-            <img src={f.img} className="mx-auto mb-4 h-16 opacity-80" />
+            <img src={f.img} className="mx-auto mb-4 h-16 opacity-80" alt={f.title} />
             <h3 className="text-lg font-bold">{f.title}</h3>
           </div>
         ))}
@@ -101,15 +95,18 @@ export default function Home() {
       </section>
 
       {/* ⭐ PRODUCT GRID */}
-      <section className="max-w-6xl mx-auto px-6 mt-16 mb-20">
-        <h2 className="text-2xl font-bold mb-4">Latest Listings</h2>
+      <section className="max-w-6xl mx-auto px-4 md:px-6 mt-12 md:mt-16 mb-16 md:mb-20">
+        <h2 className="text-2xl font-bold mb-4 md:mb-6">Latest Listings</h2>
 
         {loading ? (
           <Loader />
         ) : items.length === 0 ? (
-          <p>No items listed yet.</p>
+          <div className="text-center py-12">
+            <p className="text-gray-500 text-lg">No items listed yet.</p>
+            <p className="text-gray-400 mt-2">Be the first to list an item!</p>
+          </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-8">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 md:gap-8">
             {items.map((p) => (
               <ProductCard key={p._id} item={p} />
             ))}

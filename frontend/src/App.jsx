@@ -26,7 +26,7 @@ function App() {
         firstName: user.firstName,
         lastName: user.lastName,
         imageUrl: user.imageUrl
-      });
+      }).catch(err => console.error("User sync failed:", err));
     }
   }, [user]);
 
@@ -36,7 +36,7 @@ function App() {
       <Navbar />
 
       {/* Main Content */}
-      <main className="min-h-screen flex flex-col justify-between">
+      <main className="min-h-screen flex flex-col">
         <Routes>
           {/* PUBLIC ROUTES */}
           <Route path="/" element={<Home />} />
@@ -45,9 +45,8 @@ function App() {
           <Route path="/products/:id" element={<ProductDetail />} />
 
           {/* AUTH PAGES */}
-          <Route path="/sign-in" element={<SignInPage />} />
-          <Route path="/sign-up" element={<SignUpPage />} />
           <Route path="/sign-in/*" element={<SignInPage />} />
+          <Route path="/sign-up/*" element={<SignUpPage />} />
 
           {/* PROTECTED ROUTES */}
           <Route
@@ -68,7 +67,7 @@ function App() {
             }
           />
 
-          {/* CATCH-ALL ROUTE - This is important for SPA */}
+          {/* CATCH-ALL ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>
       </main>
@@ -79,7 +78,7 @@ function App() {
   );
 }
 
-// Optional: create a reusable protected route component
+// Protected route component
 function RequireAuth({ children }) {
   return (
     <>
@@ -87,7 +86,9 @@ function RequireAuth({ children }) {
         {children}
       </SignedIn>
       <SignedOut>
-        <RedirectToSignIn />
+        <RedirectToSignIn 
+          redirectUrl="/"
+        />
       </SignedOut>
     </>
   );

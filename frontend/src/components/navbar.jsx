@@ -49,12 +49,12 @@ export default function Navbar() {
 
           {/* Middle — Desktop Links */}
           <div className="hidden md:flex items-center gap-6 text-gray-700">
-            <Link to="/" className="hover:text-emerald-600">Home</Link>
-            <Link to="/browse" className="hover:text-emerald-600">Browse</Link>
+            <Link to="/" className="hover:text-emerald-600 transition-colors">Home</Link>
+            <Link to="/browse" className="hover:text-emerald-600 transition-colors">Browse</Link>
             <SignedIn>
               <Link
                 to="/create"
-                className="bg-emerald-600 text-white px-3 py-1 rounded-md hover:bg-emerald-700"
+                className="bg-emerald-600 text-white px-4 py-2 rounded-md hover:bg-emerald-700 transition-colors"
               >
                 Sell Item
               </Link>
@@ -66,14 +66,14 @@ export default function Navbar() {
             <SignedIn>
               <Link
                 to="/dashboard"
-                className="px-3 py-1 rounded-md border border-emerald-600 text-emerald-600 hover:bg-emerald-50"
+                className="px-4 py-2 rounded-md border border-emerald-600 text-emerald-600 hover:bg-emerald-50 transition-colors"
               >
                 Dashboard
               </Link>
 
               <button
                 onClick={handleSignOut}
-                className="ml-2 px-3 py-1 rounded-md border border-emerald-600 text-emerald-600 hover:bg-emerald-50"
+                className="px-4 py-2 rounded-md border border-emerald-600 text-emerald-600 hover:bg-emerald-50 transition-colors"
                 aria-label="Sign out"
               >
                 Sign out
@@ -83,9 +83,15 @@ export default function Navbar() {
             <SignedOut>
               <Link
                 to="/sign-in"
-                className="px-3 py-1 rounded-md border border-emerald-600 text-emerald-600 hover:bg-emerald-50"
+                className="px-4 py-2 rounded-md border border-emerald-600 text-emerald-600 hover:bg-emerald-50 transition-colors"
               >
                 Login
+              </Link>
+              <Link
+                to="/sign-up"
+                className="px-4 py-2 rounded-md bg-emerald-600 text-white hover:bg-emerald-700 transition-colors"
+              >
+                Sign Up
               </Link>
             </SignedOut>
           </div>
@@ -94,7 +100,8 @@ export default function Navbar() {
           <div className="md:hidden flex items-center">
             <button
               onClick={() => setIsMenuOpen(!isMenuOpen)}
-              className="text-gray-700 hover:text-emerald-600 p-2"
+              className="text-gray-700 hover:text-emerald-600 p-2 transition-colors"
+              aria-label="Toggle menu"
             >
               <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 {isMenuOpen ? (
@@ -109,12 +116,11 @@ export default function Navbar() {
 
         {/* Mobile Menu */}
         {isMenuOpen && (
-          <div className="md:hidden border-t border-gray-200 py-4">
-            <div className="flex flex-col space-y-4">
-              {/* All navigation items for mobile */}
+          <div className="md:hidden border-t border-gray-200 py-4 bg-white">
+            <div className="flex flex-col space-y-3">
               <Link 
                 to="/" 
-                className="text-gray-700 hover:text-emerald-600 py-2"
+                className="text-gray-700 hover:text-emerald-600 py-2 px-4 transition-colors"
                 onClick={() => setIsMenuOpen(false)}
               >
                 Home
@@ -122,7 +128,7 @@ export default function Navbar() {
               
               <Link 
                 to="/browse" 
-                className="text-gray-700 hover:text-emerald-600 py-2"
+                className="text-gray-700 hover:text-emerald-600 py-2 px-4 transition-colors"
                 onClick={() => setIsMenuOpen(false)}
               >
                 Browse
@@ -131,7 +137,7 @@ export default function Navbar() {
               <SignedIn>
                 <Link 
                   to="/create" 
-                  className="text-gray-700 hover:text-emerald-600 py-2"
+                  className="text-gray-700 hover:text-emerald-600 py-2 px-4 transition-colors"
                   onClick={() => setIsMenuOpen(false)}
                 >
                   Sell Item
@@ -139,7 +145,7 @@ export default function Navbar() {
 
                 <Link 
                   to="/dashboard" 
-                  className="text-gray-700 hover:text-emerald-600 py-2"
+                  className="text-gray-700 hover:text-emerald-600 py-2 px-4 transition-colors"
                   onClick={() => setIsMenuOpen(false)}
                 >
                   Dashboard
@@ -150,7 +156,7 @@ export default function Navbar() {
                     handleSignOut();
                     setIsMenuOpen(false);
                   }}
-                  className="text-left text-gray-700 hover:text-emerald-600 py-2"
+                  className="text-left text-gray-700 hover:text-emerald-600 py-2 px-4 transition-colors"
                 >
                   Sign out
                 </button>
@@ -159,10 +165,17 @@ export default function Navbar() {
               <SignedOut>
                 <Link 
                   to="/sign-in" 
-                  className="text-gray-700 hover:text-emerald-600 py-2"
+                  className="text-gray-700 hover:text-emerald-600 py-2 px-4 transition-colors"
                   onClick={() => setIsMenuOpen(false)}
                 >
                   Login
+                </Link>
+                <Link 
+                  to="/sign-up" 
+                  className="text-emerald-600 hover:text-emerald-700 py-2 px-4 transition-colors font-medium"
+                  onClick={() => setIsMenuOpen(false)}
+                >
+                  Sign Up
                 </Link>
               </SignedOut>
             </div>

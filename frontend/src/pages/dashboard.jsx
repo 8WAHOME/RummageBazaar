@@ -151,7 +151,7 @@ export default function Dashboard() {
       </section>
 
       <section className="mt-8">
-        <h3 className="text-xl mb-3">To maintain listing quality, Sellers are not allowed to <b>Edit</b> or <b>Delete</b>their listing</h3>
+        <h3 className="text-xl mb-3"><i>To maintain listing quality, Sellers are not allowed to <b>Edit</b> or <b>Delete</b> their listing</i></h3>
         <div className="bg-white rounded p-4 shadow text-sm text-gray-600">
           Orders and messages will appear here as the system evolves.
         </div>
