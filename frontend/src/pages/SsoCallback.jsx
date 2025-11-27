@@ -1,5 +1,5 @@
 // src/pages/SsoCallback.jsx
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useClerk, useUser } from '@clerk/clerk-react';
 
@@ -8,6 +8,7 @@ export default function SsoCallback() {
   const { isSignedIn } = useUser();
   const navigate = useNavigate();
   const { authType } = useParams();
+  const [errorHandled, setErrorHandled] = useState(false);
 
   useEffect(() => {
     // If user is already signed in, redirect to home immediately
@@ -17,14 +18,25 @@ export default function SsoCallback() {
       return;
     }
 
+    // Prevent multiple error handling attempts
+    if (errorHandled) return;
+
     const handleCallback = async () => {
       try {
         console.log(`Handling ${authType} SSO callback...`);
-        await handleRedirectCallback();
+        await handleRedirectCallback({
+          // Add explicit error handling for the callback
+          onError: (error) => {
+            console.warn(`Clerk callback error handled:`, error);
+            setErrorHandled(true);
+            navigate('/', { replace: true });
+          }
+        });
         console.log(`${authType} SSO callback successful, redirecting to home`);
         navigate('/', { replace: true });
       } catch (err) {
-        console.error(`${authType} SSO callback error:`, err);
+        console.warn(`${authType} SSO callback error:`, err);
+        setErrorHandled(true);
         
         // For ALL errors, redirect to home - Clerk handles user state
         console.log('Redirecting to home despite error');
@@ -32,8 +44,19 @@ export default function SsoCallback() {
       }
     };
 
+    // Add a safety timeout to handle uncaught errors
+    const safetyTimeout = setTimeout(() => {
+      if (!errorHandled) {
+        console.log('Safety timeout triggered, redirecting to home');
+        setErrorHandled(true);
+        navigate('/', { replace: true });
+      }
+    }, 5000); // 5 second safety net
+
     handleCallback();
-  }, [handleRedirectCallback, navigate, authType, isSignedIn]);
+
+    return () => clearTimeout(safetyTimeout);
+  }, [handleRedirectCallback, navigate, authType, isSignedIn, errorHandled]);
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50">
