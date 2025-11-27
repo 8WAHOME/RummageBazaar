@@ -10,30 +10,49 @@ export default function ProductCard({ item }) {
   const isSold = item?.status === "sold" || item?.sold === true;
   const isDonation = item?.isDonation || Number(item?.price || 0) === 0;
   
-  // Format phone number with stored country code
+  // Robust phone number formatting with +254 as default
   const formatPhoneForWhatsApp = (phone, countryCode = "+254") => {
     if (!phone) return null;
     
-    const cleanPhone = phone.replace(/\D/g, '');
+    const cleanPhone = phone.toString().replace(/\D/g, '');
+    if (!cleanPhone) return null;
+    
     let formattedNumber = cleanPhone;
     
-    if (cleanPhone.startsWith('0') && cleanPhone.length === 10) {
-      formattedNumber = countryCode.replace('+', '') + cleanPhone.slice(1);
-    }
-    else if (cleanPhone.length === 9) {
-      formattedNumber = countryCode.replace('+', '') + cleanPhone;
-    }
-    else if (cleanPhone.startsWith('254') && cleanPhone.length === 12) {
+    // Handle different phone number formats
+    if (cleanPhone.startsWith('254') && cleanPhone.length === 12) {
+      // Already has Kenya country code
       formattedNumber = cleanPhone;
     }
+    else if (cleanPhone.startsWith('0') && cleanPhone.length === 10) {
+      // Kenyan number with leading 0 (07XXXXXXXX)
+      formattedNumber = '254' + cleanPhone.slice(1);
+    }
+    else if (cleanPhone.length === 9) {
+      // Kenyan number without leading 0 (7XXXXXXXX)
+      formattedNumber = '254' + cleanPhone;
+    }
+    else if (cleanPhone.length === 12 && !cleanPhone.startsWith('254')) {
+      // International number without country code, use provided country code
+      formattedNumber = countryCode.replace('+', '') + cleanPhone;
+    }
+    else if (cleanPhone.length === 10 && !cleanPhone.startsWith('0')) {
+      // 10-digit number without leading 0, assume it's international
+      formattedNumber = countryCode.replace('+', '') + cleanPhone;
+    }
     else {
+      // Default case - use country code with the number as-is
       formattedNumber = countryCode.replace('+', '') + cleanPhone;
     }
     
-    return `+${formattedNumber}`;
+    // Ensure it starts with + for WhatsApp
+    return formattedNumber.startsWith('+') ? formattedNumber : `+${formattedNumber}`;
   };
 
-  const formattedPhone = formatPhoneForWhatsApp(item?.sellerPhone, item?.countryCode || "+254");
+  // Use stored countryCode or default to +254
+  const storedCountryCode = item?.countryCode || "+254";
+  const formattedPhone = formatPhoneForWhatsApp(item?.sellerPhone, storedCountryCode);
+  
   const whatsappHref = formattedPhone
     ? `https://wa.me/${formattedPhone}?text=${encodeURIComponent(`Hi! I'm interested in "${item.title}" listed for ${isDonation ? "FREE" : `KSH ${item.price}`}. Is it still available?`)}`
     : null;
@@ -73,7 +92,7 @@ export default function ProductCard({ item }) {
               <a 
                 href={whatsappHref} 
                 target="_blank" 
-                rel="noreferrer" 
+                rel="noopener noreferrer" 
                 className="px-3 py-1 bg-emerald-500 text-white rounded-md hover:bg-emerald-600 flex items-center gap-2 transition-colors"
               >
                 <FaWhatsapp />
