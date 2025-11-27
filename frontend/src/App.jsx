@@ -14,7 +14,7 @@ import NotFound from "./pages/notFound.jsx";
 import SignInPage from "./pages/login.jsx";
 import SignUpPage from "./pages/signup.jsx";
 import CreateListing from "./pages/createListing.jsx";
-import SsoCallback from "./pages/SsoCallback.jsx"; // Add this import
+import SsoCallback from "./pages/SsoCallback.jsx";
 
 function App() {
   const { user } = useUser();
@@ -49,9 +49,13 @@ function App() {
           <Route path="/sign-in/*" element={<SignInPage />} />
           <Route path="/sign-up/*" element={<SignUpPage />} />
           
-          {/* CLERK SSO CALLBACK ROUTE - Use dedicated component */}
+          {/* CLERK SSO CALLBACK ROUTES - Handle exact paths */}
           <Route 
             path="/sign-in/sso-callback" 
+            element={<SsoCallback />} 
+          />
+          <Route 
+            path="/sign-up/sso-callback" 
             element={<SsoCallback />} 
           />
 

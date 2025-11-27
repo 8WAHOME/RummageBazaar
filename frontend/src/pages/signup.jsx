@@ -18,15 +18,7 @@ export default function Signup() {
           <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
             Create your account
           </h2>
-          <p className="mt-2 text-center text-sm text-gray-600">
-            Already have an account?{" "}
-            <a 
-              href="/sign-in" 
-              className="font-medium text-emerald-600 hover:text-emerald-500"
-            >
-              Sign in instead
-            </a>
-          </p>
+          {/* Removed the "Already have an account?" text as requested */}
         </div>
         <SignUp 
           routing="path" 

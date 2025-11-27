@@ -27,15 +27,7 @@ export default function Login() {
               <p className="text-sm text-blue-800 text-center">{message}</p>
             </div>
           )}
-          <p className="mt-2 text-center text-sm text-gray-600">
-            Don't have an account?{" "}
-            <a 
-              href="/sign-up" 
-              className="font-medium text-emerald-600 hover:text-emerald-500"
-            >
-              Sign up here
-            </a>
-          </p>
+          {/* Removed the "Don't have an account?" text as requested */}
         </div>
         <SignIn 
           routing="path" 

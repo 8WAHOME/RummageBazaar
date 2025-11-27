@@ -26,16 +26,9 @@ export default function SsoCallback() {
       } catch (err) {
         console.error(`${authType} SSO callback error:`, err);
         
-        // For ALL errors during sign-up, redirect to home
-        // Clerk automatically handles existing users and signs them in
-        if (authType === 'sign-up') {
-          console.log('Sign-up flow error - Clerk handles existing users automatically, redirecting to home');
-          navigate('/', { replace: true });
-        } else {
-          // For sign-in errors, also redirect to home
-          console.log('Sign-in error, redirecting to home');
-          navigate('/', { replace: true });
-        }
+        // For ALL errors, redirect to home - Clerk handles user state
+        console.log('Redirecting to home despite error');
+        navigate('/', { replace: true });
       }
     };
 
