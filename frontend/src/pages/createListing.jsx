@@ -1,9 +1,62 @@
-// src/pages/createListing.jsx
 import React, { useState, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useClerk } from "@clerk/clerk-react";
 import { api } from "../utils/api.js";
 import ImageUpload from "../components/ImageUpload.jsx";
+import { categories } from "../utils/categories.js";
+import {
+  DevicePhoneMobileIcon,
+  HomeModernIcon,
+  ShoppingBagIcon,
+  BookOpenIcon,
+  TrophyIcon,
+  TruckIcon,
+  BuildingStorefrontIcon,
+  BriefcaseIcon,
+  HeartIcon,
+  SparklesIcon,
+  PuzzlePieceIcon,
+  BabyIcon,
+  PaintBrushIcon,
+  MusicalNoteIcon,
+  ScissorsIcon,
+  WrenchIcon,
+  GlobeAltIcon,
+  CakeIcon,
+  CogIcon,
+  CubeIcon,
+  PhotoIcon,
+  MapPinIcon,
+  CurrencyDollarIcon,
+  PhoneIcon,
+  TagIcon,
+  CheckBadgeIcon,
+} from "@heroicons/react/24/outline";
+
+// Icon mapping for categories
+const categoryIcons = {
+  'Electronics': DevicePhoneMobileIcon,
+  'Furniture & Home Decor': HomeModernIcon,
+  'Fashion & Accessories': ShoppingBagIcon,
+  'Books & Education': BookOpenIcon,
+  'Sports & Outdoors': TrophyIcon,
+  'Vehicles & Automotive': TruckIcon,
+  'Real Estate': BuildingStorefrontIcon,
+  'Jobs & Services': BriefcaseIcon,
+  'Pets & Animals': HeartIcon,
+  'Health & Beauty': SparklesIcon,
+  'Toys & Games': PuzzlePieceIcon,
+  'Baby & Kids': BabyIcon,
+  'Art & Collectibles': PaintBrushIcon,
+  'Musical Instruments': MusicalNoteIcon,
+  'Office Supplies': ScissorsIcon,
+  'Tools & DIY': WrenchIcon,
+  'Travel & Luggage': GlobeAltIcon,
+  'Food & Beverages': CakeIcon,
+  'Agriculture & Farming': TruckIcon,
+  'Industrial Equipment': CogIcon,
+  'Other': CubeIcon,
+};
 
 export default function CreateListing() {
   const navigate = useNavigate();
@@ -14,7 +67,6 @@ export default function CreateListing() {
 
   const { user, session } = useClerk();
 
-  // Effect to handle editing check
   useEffect(() => {
     if (editing) {
       alert("Editing is prohibited to maintain listing quality.");
@@ -22,19 +74,18 @@ export default function CreateListing() {
     }
   }, [editing, navigate]);
 
-  // Form state - this is the object that stores all the form field values
   const [form, setForm] = useState({
     title: "",
     description: "",
     price: "",
     sellerPhone: "",
-    countryCode: "+254", // Added country code with Kenya as default
+    countryCode: "+254",
     category: "",
     condition: "good",
     location: "",
   });
 
-  const [imagesBase64, setImagesBase64] = useState([]); // array of base64 strings
+  const [imagesBase64, setImagesBase64] = useState([]);
   const [loading, setLoading] = useState(false);
   const [isDonation, setIsDonation] = useState(false);
 
@@ -54,16 +105,17 @@ export default function CreateListing() {
     setLoading(true);
 
     try {
-      // validation
       if (
         !form.title ||
         !form.description ||
         (!form.price && !isDonation) ||
         !form.sellerPhone ||
-        !form.category
+        !form.category ||
+        !form.location ||
+        imagesBase64.length === 0
       ) {
         alert(
-          "Please fill required fields. Price is required unless marking as donation (tick Donate)."
+          "Please fill all required fields including location and at least one image. Price is required unless marking as donation."
         );
         setLoading(false);
         return;
@@ -71,19 +123,17 @@ export default function CreateListing() {
 
       const token = await session.getToken();
 
-      // Build payload: images is array of base64 strings
       const payload = {
         ...form,
         price: isDonation ? 0 : Number(form.price || 0),
-        images: imagesBase64, // backend expects base64 strings
+        images: imagesBase64,
         isDonation: !!isDonation,
-        userId: user?.id, // fallback, backend prefers Clerk auth
+        userId: user?.id,
       };
 
       const res = await api("/products", "POST", payload, token);
 
       if (res?._id) {
-        // Navigate to product page with pending flag — informs user editing is disabled
         navigate(`/products/${res._id}?pending=true`);
       } else {
         alert("Listing created but response unexpected. Check server logs.");
@@ -98,56 +148,79 @@ export default function CreateListing() {
 
   return (
     <div className="max-w-4xl mx-auto p-8 bg-gray-50 min-h-screen">
-      <h2 className="text-3xl font-bold mb-6 text-gray-800">Create a New Listing</h2>
+      <div className="text-center mb-8">
+        <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-2">
+          Create a New Listing
+        </h2>
+        <p className="text-gray-600">
+          Fill in the details below to list your item
+        </p>
+      </div>
 
-      <form onSubmit={submit} className="bg-white rounded-lg shadow-lg p-6 space-y-6">
+      <form onSubmit={submit} className="bg-white rounded-2xl shadow-lg p-6 space-y-8">
         {/* Title */}
         <div>
-          <label className="block text-sm font-medium mb-1">Title</label>
+          <label className="block text-sm font-semibold text-gray-800 mb-2 flex items-center gap-2">
+            <TagIcon className="w-5 h-5 text-emerald-600" />
+            Title *
+          </label>
           <input
             name="title"
             value={form.title}
             onChange={onChange}
             required
-            className="w-full border rounded px-3 py-2"
+            className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+            placeholder="Enter item title"
           />
         </div>
 
         {/* Description */}
         <div>
-          <label className="block text-sm font-medium mb-1">Description</label>
+          <label className="block text-sm font-semibold text-gray-800 mb-2 flex items-center gap-2">
+            <BookOpenIcon className="w-5 h-5 text-emerald-600" />
+            Description *
+          </label>
           <textarea
             name="description"
             value={form.description}
             onChange={onChange}
             rows={5}
             required
-            className="w-full border rounded px-3 py-2"
+            className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+            placeholder="Describe your item in detail"
           />
         </div>
 
         {/* Price & Seller Phone */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div>
-            <label className="block text-sm font-medium mb-1">Price (KSH)</label>
+            <label className="block text-sm font-semibold text-gray-800 mb-2 flex items-center gap-2">
+              <CurrencyDollarIcon className="w-5 h-5 text-emerald-600" />
+              {isDonation ? "Price (Donation)" : "Price (KSH) *"}
+            </label>
             <input
               name="price"
               value={form.price}
               onChange={onChange}
               type="number"
               disabled={isDonation}
-              className="w-full border rounded px-3 py-2"
+              required={!isDonation}
+              className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-emerald-500 focus:border-transparent disabled:bg-gray-100 disabled:text-gray-500"
+              placeholder="Enter price"
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium mb-1">Seller Phone</label>
+            <label className="block text-sm font-semibold text-gray-800 mb-2 flex items-center gap-2">
+              <PhoneIcon className="w-5 h-5 text-emerald-600" />
+              Seller Phone *
+            </label>
             <div className="flex">
               <select 
                 name="countryCode"
                 value={form.countryCode}
                 onChange={onChange}
-                className="border rounded-l px-3 py-2 bg-gray-100"
+                className="border border-gray-300 rounded-l-lg px-3 py-3 bg-gray-50 focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
               >
                 <option value="+254">+254 (KE)</option>
                 <option value="+255">+255 (TZ)</option>
@@ -162,74 +235,110 @@ export default function CreateListing() {
                 onChange={onChange}
                 required
                 placeholder="712345678"
-                className="w-full border rounded-r px-3 py-2"
+                className="flex-1 border border-gray-300 rounded-r-lg px-4 py-3 focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
               />
             </div>
-            <p className="text-xs text-gray-500 mt-1">Enter phone number without country code</p>
+            <p className="text-xs text-gray-500 mt-2">Enter phone number without country code</p>
           </div>
         </div>
 
         {/* Category & Condition */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div>
-            <label className="block text-sm font-medium mb-1">Category</label>
-            <input
+            <label className="block text-sm font-semibold text-gray-800 mb-2 flex items-center gap-2">
+              <CubeIcon className="w-5 h-5 text-emerald-600" />
+              Category *
+            </label>
+            <select
               name="category"
               value={form.category}
               onChange={onChange}
-              className="w-full border rounded px-3 py-2"
-            />
+              required
+              className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+            >
+              <option value="">Select a category</option>
+              {categories.map((cat) => (
+                <option key={cat} value={cat}>{cat}</option>
+              ))}
+            </select>
           </div>
 
           <div>
-            <label className="block text-sm font-medium mb-1">Condition</label>
+            <label className="block text-sm font-semibold text-gray-800 mb-2 flex items-center gap-2">
+              <CheckBadgeIcon className="w-5 h-5 text-emerald-600" />
+              Condition
+            </label>
             <select
               name="condition"
               value={form.condition}
               onChange={onChange}
-              className="w-full border rounded px-3 py-2"
+              className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
             >
               <option value="new">New</option>
               <option value="good">Good</option>
               <option value="fair">Fair</option>
+              <option value="needs-repair">Needs Repair</option>
             </select>
           </div>
         </div>
 
         {/* Donation Checkbox */}
-        <div>
+        <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
           <label className="flex items-center gap-3">
             <input
               type="checkbox"
               checked={isDonation}
               onChange={(e) => setIsDonation(e.target.checked)}
+              className="rounded focus:ring-2 focus:ring-emerald-500 text-emerald-600"
             />
-            <span className="text-sm">This is a donation (item will be listed for free)</span>
+            <span className="text-sm font-medium text-gray-800">This is a donation (item will be listed for free)</span>
           </label>
         </div>
 
         {/* Location */}
         <div>
-          <label className="block text-sm font-medium mb-1">Location</label>
+          <label className="block text-sm font-semibold text-gray-800 mb-2 flex items-center gap-2">
+            <MapPinIcon className="w-5 h-5 text-emerald-600" />
+            Location *
+          </label>
           <input
             name="location"
             value={form.location}
             onChange={onChange}
-            className="w-full border rounded px-3 py-2"
+            required
+            className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+            placeholder="Enter item location"
           />
         </div>
 
         {/* Image Upload */}
-        <ImageUpload maxFiles={maxImages} onChange={(base64Arr) => setImagesBase64(base64Arr)} />
+        <div>
+          <label className="block text-sm font-semibold text-gray-800 mb-2 flex items-center gap-2">
+            <PhotoIcon className="w-5 h-5 text-emerald-600" />
+            Images *
+          </label>
+          <ImageUpload maxFiles={maxImages} onChange={(base64Arr) => setImagesBase64(base64Arr)} />
+          <p className="text-xs text-gray-500 mt-2">At least one image is required. Maximum {maxImages} images.</p>
+        </div>
 
         {/* Submit Button */}
-        <div className="flex justify-end">
+        <div className="flex justify-end pt-6 border-t border-gray-200">
           <button
             type="submit"
             disabled={loading}
-            className="bg-emerald-600 text-white px-6 py-2 rounded hover:bg-emerald-700"
+            className="bg-emerald-600 text-white px-8 py-4 rounded-xl hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-semibold text-lg flex items-center gap-2"
           >
-            {loading ? "Saving..." : "Create Listing"}
+            {loading ? (
+              <>
+                <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                Creating Listing...
+              </>
+            ) : (
+              <>
+                <CubeIcon className="w-5 h-5" />
+                Create Listing
+              </>
+            )}
           </button>
         </div>
       </form>
