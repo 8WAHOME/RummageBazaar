@@ -8,16 +8,20 @@ import {
   markProductAsSold,
   deleteProduct,
   getSellerAnalytics,
-  updateProduct
+  updateProduct,
+  incrementViewCount
 } from "../controllers/productController.js";
 
 const router = express.Router();
 
-// GET all products or filtered by userId/status
+// GET all products with advanced filtering
 router.get("/", getProducts);
 
 // GET single product
 router.get("/:id", getProductById);
+
+// INCREMENT view count
+router.post("/:id/view", incrementViewCount);
 
 // CREATE product
 router.post("/", requireAuth(), createProduct);
