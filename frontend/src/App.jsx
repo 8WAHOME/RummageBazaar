@@ -5,7 +5,7 @@ import { SignedIn, SignedOut, RedirectToSignIn, useUser } from "@clerk/clerk-rea
 
 import Navbar from "./components/navbar.jsx";
 import Footer from "./components/footer.jsx";
-import LoadingSpinner from "./components/loadingSpinner.jsx";
+import Loader from "./components/loader.jsx";
 
 import Home from "./pages/home.jsx";
 import Browse from "./pages/browse.jsx";
@@ -40,7 +40,7 @@ function App() {
         imageUrl: user.imageUrl,
         username: user.username
       })
-      .then(() => console.log("✅ User synced successfully"))
+      .then(() => console.log("User synced successfully"))
       .catch(err => console.warn("User sync warning:", err.message));
     }
   }, [user, isLoaded]);
@@ -50,7 +50,7 @@ function App() {
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center">
         <div className="text-center">
-          <div className="w-16 h-16 border-4 border-emerald-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-emerald-600 mx-auto mb-4"></div>
           <p className="text-gray-600 font-semibold">Loading RummageBazaar...</p>
         </div>
       </div>
@@ -66,7 +66,7 @@ function App() {
       {loading && (
         <div className="fixed inset-0 bg-white bg-opacity-80 z-50 flex items-center justify-center">
           <div className="text-center">
-            <div className="w-12 h-12 border-4 border-emerald-600 border-t-transparent rounded-full animate-spin mx-auto mb-3"></div>
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-600 mx-auto mb-3"></div>
             <p className="text-gray-600 font-medium">Loading...</p>
           </div>
         </div>
@@ -169,7 +169,6 @@ function RequireAuth({ children }) {
       <SignedOut>
         <RedirectToSignIn 
           redirectUrl={location.pathname}
-          afterSignOutUrl="/"
         />
       </SignedOut>
     </>
