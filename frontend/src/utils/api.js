@@ -3,17 +3,33 @@ export async function api(endpoint, method = "GET", body = null, token = null) {
   const baseURL = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
 
   const headers = {};
-  // If body is plain JSON (not FormData), set content-type
-  if (body && !(body instanceof FormData)) {
-    headers["Content-Type"] = "application/json";
+  
+  // Only set content-type and body for non-GET/HEAD requests
+  if (body && method !== "GET" && method !== "HEAD") {
+    if (!(body instanceof FormData)) {
+      headers["Content-Type"] = "application/json";
+    }
   }
+  
   if (token) headers["Authorization"] = `Bearer ${token}`;
 
-  const res = await fetch(baseURL + endpoint, {
+  // Don't include body for GET/HEAD requests
+  const config = {
     method,
     headers,
-    body: body instanceof FormData ? body : body ? JSON.stringify(body) : null,
-  });
+  };
+
+  // Only add body for non-GET/HEAD requests
+  if (body && method !== "GET" && method !== "HEAD") {
+    config.body = body instanceof FormData ? body : JSON.stringify(body);
+  }
+
+  const res = await fetch(baseURL + endpoint, config);
+
+  // Handle 204 No Content responses
+  if (res.status === 204) {
+    return null;
+  }
 
   let data = null;
   try {
@@ -34,4 +50,3 @@ export async function api(endpoint, method = "GET", body = null, token = null) {
 export async function markProductAsSold(productId, token) {
   return api(`/products/${productId}/sold`, "PATCH", {}, token);
 }
-

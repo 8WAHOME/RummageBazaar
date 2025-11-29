@@ -19,6 +19,53 @@ import {
   GiftIcon,
 } from "@heroicons/react/24/outline";
 
+// Cache management utilities
+const DashboardCache = {
+  KEY: 'dashboard_cache',
+  TTL: 5 * 60 * 1000, // 5 minutes
+
+  get() {
+    try {
+      const cached = localStorage.getItem(this.KEY);
+      if (!cached) return null;
+
+      const { data, timestamp } = JSON.parse(cached);
+      
+      // Check if cache is expired
+      if (Date.now() - timestamp > this.TTL) {
+        this.clear();
+        return null;
+      }
+
+      return data;
+    } catch (error) {
+      console.error('Error reading dashboard cache:', error);
+      this.clear();
+      return null;
+    }
+  },
+
+  set(data) {
+    try {
+      const cacheData = {
+        data,
+        timestamp: Date.now()
+      };
+      localStorage.setItem(this.KEY, JSON.stringify(cacheData));
+    } catch (error) {
+      console.error('Error setting dashboard cache:', error);
+    }
+  },
+
+  clear() {
+    try {
+      localStorage.removeItem(this.KEY);
+    } catch (error) {
+      console.error('Error clearing dashboard cache:', error);
+    }
+  }
+};
+
 export default function Dashboard() {
   const { user, session } = useClerk();
   const navigate = useNavigate();
@@ -39,59 +86,101 @@ export default function Dashboard() {
 
   const isAdmin = Boolean(user?.publicMetadata?.role === "admin" || user?.publicMetadata?.role === "Admin");
 
-  async function load() {
+  // Calculate analytics from items (fallback)
+  const calculateAnalytics = (itemsArray) => {
+    const userItems = Array.isArray(itemsArray) ? itemsArray : [];
+    const soldItems = userItems.filter(item => item.status === "sold");
+    const activeListings = userItems.filter(item => item.status === "active");
+    const totalRevenue = soldItems.reduce((sum, item) => sum + (item.price || 0), 0);
+    
+    return {
+      totalListings: userItems.length,
+      soldItems: soldItems.length,
+      activeListings: activeListings.length,
+      totalRevenue,
+      views: userItems.reduce((sum, item) => sum + (item.views || 0), 0),
+      averagePrice: userItems.length > 0 
+        ? Math.round(userItems.reduce((sum, item) => sum + (item.price || 0), 0) / userItems.length)
+        : 0,
+      donationCount: userItems.filter(p => p.isDonation).length,
+    };
+  };
+
+  async function load(useCache = true) {
     if (!user?.id) {
       setItems([]);
       setLoading(false);
       return;
     }
+
     setLoading(true);
+    setError(null);
+
     try {
-      // Load user's products
-      const res = await api(`/products?userId=${user.id}`, "GET");
-      const userItems = Array.isArray(res) ? res : [];
-      setItems(userItems);
-      
-      // Load analytics from dedicated endpoint
-      const token = await session.getToken();
-      const analyticsData = await api(`/products/analytics/seller/${user.id}`, "GET", {}, token);
-      setAnalytics(analyticsData);
-      
-      setError(null);
+      // Try to load from cache first for immediate display
+      if (useCache) {
+        const cachedData = DashboardCache.get();
+        if (cachedData) {
+          setItems(cachedData.items || []);
+          setAnalytics(cachedData.analytics || calculateAnalytics(cachedData.items || []));
+        }
+      }
+
+      let userItems = [];
+      let analyticsData = {};
+
+      try {
+        // Load user's products - FIXED: pass null for body, token as last parameter
+        const token = await session.getToken();
+        const res = await api(`/products?userId=${user.id}`, "GET", null, token);
+        userItems = Array.isArray(res) ? res : [];
+        setItems(userItems);
+
+        // Try to load analytics from dedicated endpoint - FIXED: pass null for body
+        try {
+          analyticsData = await api(`/products/analytics/seller/${user.id}`, "GET", null, token);
+          setAnalytics(analyticsData);
+        } catch (analyticsError) {
+          console.warn("Analytics endpoint failed, calculating locally:", analyticsError);
+          // Fallback to client-side calculation
+          analyticsData = calculateAnalytics(userItems);
+          setAnalytics(analyticsData);
+        }
+
+        // Cache the successful data
+        DashboardCache.set({
+          items: userItems,
+          analytics: analyticsData,
+        });
+
+      } catch (fetchError) {
+        console.error("Fetch failed:", fetchError);
+        throw fetchError;
+      }
+
     } catch (err) {
-      console.error("Dashboard load:", err);
-      setError(err.message || "Failed to load");
+      console.error("Dashboard load error:", err);
+      setError(err.message || "Failed to load dashboard data");
       
-      // Fallback to client-side calculation if analytics endpoint fails
-      const userItems = Array.isArray(items) ? items : [];
-      const soldItems = userItems.filter(item => item.status === "sold");
-      const activeListings = userItems.filter(item => item.status === "active");
-      const totalRevenue = soldItems.reduce((sum, item) => sum + (item.price || 0), 0);
-      
-      setAnalytics({
-        totalListings: userItems.length,
-        soldItems: soldItems.length,
-        activeListings: activeListings.length,
-        totalRevenue,
-        views: userItems.reduce((sum, item) => sum + (item.views || 0), 0),
-        averagePrice: userItems.length > 0 
-          ? Math.round(userItems.reduce((sum, item) => sum + (item.price || 0), 0) / userItems.length)
-          : 0,
-        donationCount: userItems.filter(p => p.isDonation).length,
-      });
+      // If we have cached data, use it even if fetch failed
+      const cachedData = DashboardCache.get();
+      if (!cachedData) {
+        setError("Unable to load dashboard data. Please check your connection.");
+      }
     } finally {
       setLoading(false);
     }
   }
 
   useEffect(() => {
-    load();
+    load(true); // Enable cache on initial load
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id]);
 
   const markAsSold = async (productId) => {
     if (!user?.id) return alert("Not signed in");
     if (!confirm("Mark this listing as SOLD? This will move it to your sales history.")) return;
+    
     setBusyId(productId);
     try {
       const token = await session.getToken();
@@ -102,8 +191,10 @@ export default function Dashboard() {
         p._id === productId ? { ...p, status: "sold", soldAt: new Date() } : p
       ));
       
-      // Reload analytics to get updated numbers
-      load();
+      // Clear cache and reload fresh data
+      DashboardCache.clear();
+      await load(false);
+      
     } catch (err) {
       console.error("Mark sold error:", err);
       alert(err.message || "Failed to mark as sold");
@@ -115,19 +206,30 @@ export default function Dashboard() {
   const removeListing = async (productId) => {
     if (!user?.id) return alert("Not signed in");
     if (!confirm("Delete this listing? This action cannot be undone.")) return;
+    
     setBusyId(productId);
     try {
       const token = await session.getToken();
-      await api(`/products/${productId}`, "DELETE", {}, token);
+      await api(`/products/${productId}`, "DELETE", null, token);
+      
+      // Update local state immediately
       setItems((prev) => prev.filter((p) => p._id !== productId));
-      // Reload analytics
-      load();
+      
+      // Clear cache and reload
+      DashboardCache.clear();
+      await load(false);
+      
     } catch (err) {
       console.error("Delete error:", err);
       alert(err.message || "Failed to delete listing");
     } finally {
       setBusyId(null);
     }
+  };
+
+  const handleRefresh = async () => {
+    DashboardCache.clear();
+    await load(false);
   };
 
   // Filter items for display
@@ -150,6 +252,11 @@ export default function Dashboard() {
               <p className="text-gray-600 mt-2">
                 Manage your listings and track your performance
               </p>
+              {error && (
+                <div className="mt-2 p-3 bg-yellow-50 border border-yellow-200 rounded-lg text-yellow-700 text-sm">
+                  ⚠️ {error} {DashboardCache.get() && "(Showing cached data)"}
+                </div>
+              )}
             </div>
             <div className="flex gap-3 mt-4 md:mt-0">
               <Link 
@@ -160,21 +267,16 @@ export default function Dashboard() {
                 Create Listing
               </Link>
               <button 
-                onClick={load} 
-                className="border border-gray-300 text-gray-700 px-4 py-3 rounded-xl font-semibold hover:bg-gray-50 transition-colors flex items-center gap-2"
+                onClick={handleRefresh} 
+                disabled={loading}
+                className="border border-gray-300 text-gray-700 px-4 py-3 rounded-xl font-semibold hover:bg-gray-50 transition-colors flex items-center gap-2 disabled:opacity-50"
               >
-                <ArrowPathIcon className="w-5 h-5" />
+                <ArrowPathIcon className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
                 Refresh
               </button>
             </div>
           </div>
         </div>
-
-        {error && (
-          <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-xl text-red-700">
-            {error}
-          </div>
-        )}
 
         {/* Enhanced Analytics Cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-6 gap-6 mb-8">
@@ -369,15 +471,14 @@ export default function Dashboard() {
           </section>
         )}
 
-        {/* Rest of the components remain the same */}
         {/* Information Section */}
         <section className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-2xl p-8 border border-blue-100">
-          {/* ... existing code ... */}
+          {/* ... your existing information section code ... */}
         </section>
 
         {/* Coming Soon Section */}
         <section className="mt-8 bg-white rounded-2xl shadow-lg p-8 border border-gray-100">
-          {/* ... existing code ... */}
+          {/* ... your existing coming soon section code ... */}
         </section>
       </div>
     </div>
