@@ -15,7 +15,6 @@ import {
   HeartIcon,
   SparklesIcon,
   PuzzlePieceIcon,
-  BabyIcon,
   PaintBrushIcon,
   MusicalNoteIcon,
   ScissorsIcon,
@@ -41,7 +40,7 @@ const categoryIcons = {
   'Pets & Animals': HeartIcon,
   'Health & Beauty': SparklesIcon,
   'Toys & Games': PuzzlePieceIcon,
-  'Baby & Kids': BabyIcon,
+  'Baby & Kids': HeartIcon, // Using Heart icon for Baby & Kids
   'Art & Collectibles': PaintBrushIcon,
   'Musical Instruments': MusicalNoteIcon,
   'Office Supplies': ScissorsIcon,

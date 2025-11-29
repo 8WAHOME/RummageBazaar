@@ -16,14 +16,12 @@ import {
   HeartIcon,
   SparklesIcon,
   PuzzlePieceIcon,
-  BabyIcon,
   PaintBrushIcon,
   MusicalNoteIcon,
   ScissorsIcon,
   WrenchIcon,
   GlobeAltIcon,
   CakeIcon,
-  TruckIcon as FarmTruckIcon,
   CogIcon,
   CubeIcon,
 } from "@heroicons/react/24/outline";
@@ -41,14 +39,14 @@ const categoryIcons = {
   'Pets & Animals': HeartIcon,
   'Health & Beauty': SparklesIcon,
   'Toys & Games': PuzzlePieceIcon,
-  'Baby & Kids': BabyIcon,
+  'Baby & Kids': HeartIcon, // Using Heart icon for Baby & Kids
   'Art & Collectibles': PaintBrushIcon,
   'Musical Instruments': MusicalNoteIcon,
   'Office Supplies': ScissorsIcon,
   'Tools & DIY': WrenchIcon,
   'Travel & Luggage': GlobeAltIcon,
   'Food & Beverages': CakeIcon,
-  'Agriculture & Farming': FarmTruckIcon,
+  'Agriculture & Farming': TruckIcon,
   'Industrial Equipment': CogIcon,
   'Other': CubeIcon,
 };
@@ -92,7 +90,7 @@ export default function Home() {
           </h1>
 
           <p className="text-xl md:text-2xl mb-8 text-emerald-100 max-w-3xl mx-auto">
-            Your premier marketplace for buying and selling quality items.
+            Your premier marketplace for Donation, Buying and Selling quality items.
           </p>
 
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
