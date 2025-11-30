@@ -1,5 +1,6 @@
 // backend/controllers/productController.js
 import Product from "../models/productModel.js";
+import User from "../models/userModel.js";
 import mongoose from 'mongoose';
 
 /* -----------------------------------------------------
@@ -51,19 +52,39 @@ export const getProducts = async (req, res) => {
   }
 };
 
-// ... keep all your other functions the same ...
+/* -----------------------------------------------------
+   GET SINGLE PRODUCT (with view tracking and privacy)
+----------------------------------------------------- */
 export const getProductById = async (req, res) => {
   try {
+    const auth = req.auth;
+    const clerkUserId = auth?.userId;
+    
     const product = await Product.findById(req.params.id);
 
     if (!product) {
       return res.status(404).json({ error: "Product not found." });
     }
 
-    product.views += 1;
-    product.save().catch(err => console.error("View count update failed:", err));
+    // Check if viewer is the seller
+    const isSeller = product.userId === clerkUserId;
+    const isAdmin = await User.isAdmin(clerkUserId);
 
-    return res.json(product);
+    // Prepare response data
+    const productData = product.toObject();
+    
+    // Hide views from non-sellers/non-admins
+    if (!isSeller && !isAdmin) {
+      delete productData.views;
+    }
+
+    // Increment views when product is viewed by non-sellers (async)
+    if (!isSeller) {
+      product.views += 1;
+      product.save().catch(err => console.error("View count update failed:", err));
+    }
+
+    return res.json(productData);
 
   } catch (err) {
     console.error("GET PRODUCT ERROR:", err);
@@ -76,6 +97,9 @@ export const getProductById = async (req, res) => {
   }
 };
 
+/* -----------------------------------------------------
+   CREATE PRODUCT (with user listing count update)
+----------------------------------------------------- */
 export const createProduct = async (req, res) => {
   try {
     const auth = req.auth;
@@ -146,6 +170,12 @@ export const createProduct = async (req, res) => {
       views: 0
     });
 
+    // Update user's listing count
+    await User.findOneAndUpdate(
+      { clerkId: clerkUserId },
+      { $inc: { totalListings: 1 } }
+    );
+
     console.log(`Product created: ${product.title} by user ${clerkUserId}`);
 
     return res.status(201).json({
@@ -159,7 +189,6 @@ export const createProduct = async (req, res) => {
     return res.status(500).json({ error: "Failed to create product. Please try again." });
   }
 };
-
 
 /* -----------------------------------------------------
    MARK AS SOLD (with enhanced authorization)
@@ -176,10 +205,10 @@ export const markProductAsSold = async (req, res) => {
       return res.status(404).json({ error: "Product not found." });
     }
 
-    // Enhanced authorization check - fixed undefined 'user' variable
     const isOwner = product.userId === clerkUserId;
+    const isAdmin = await User.isAdmin(clerkUserId);
     
-    if (!isOwner) {
+    if (!isOwner && !isAdmin) {
       return res.status(403).json({ 
         error: "Not authorized to mark this product as sold." 
       });
@@ -204,7 +233,7 @@ export const markProductAsSold = async (req, res) => {
 };
 
 /* -----------------------------------------------------
-   DELETE PRODUCT (with enhanced authorization)
+   DELETE PRODUCT (with enhanced authorization and user count update)
 ----------------------------------------------------- */
 export const deleteProduct = async (req, res) => {
   try {
@@ -218,16 +247,24 @@ export const deleteProduct = async (req, res) => {
       return res.status(404).json({ error: "Product not found." });
     }
 
-    // Enhanced authorization check - fixed undefined 'user' variable
     const isOwner = product.userId === clerkUserId;
+    const isAdmin = await User.isAdmin(clerkUserId);
     
-    if (!isOwner) {
+    if (!isOwner && !isAdmin) {
       return res.status(403).json({ 
         error: "Not authorized to delete this product." 
       });
     }
 
     await Product.findByIdAndDelete(productId);
+
+    // Update user's listing count if owner deleted it
+    if (isOwner) {
+      await User.findOneAndUpdate(
+        { clerkId: clerkUserId },
+        { $inc: { totalListings: -1 } }
+      );
+    }
 
     console.log(`Product deleted: ${product.title} by user ${clerkUserId}`);
 
@@ -243,7 +280,7 @@ export const deleteProduct = async (req, res) => {
 };
 
 /* -----------------------------------------------------
-   GET SELLER ANALYTICS (enhanced)
+   GET SELLER ANALYTICS (enhanced with unique email counting)
 ----------------------------------------------------- */
 export const getSellerAnalytics = async (req, res) => {
   try {
@@ -252,7 +289,7 @@ export const getSellerAnalytics = async (req, res) => {
     const { userId } = req.params;
 
     // Verify the authenticated user is requesting their own analytics or is admin
-    if (clerkUserId !== userId) {
+    if (clerkUserId !== userId && !(await User.isAdmin(clerkUserId))) {
       return res.status(403).json({ error: "Not authorized to view these analytics." });
     }
 
@@ -263,12 +300,16 @@ export const getSellerAnalytics = async (req, res) => {
     const totalRevenue = soldProducts.reduce((sum, item) => sum + (item.price || 0), 0);
     const totalViews = products.reduce((sum, item) => sum + (item.views || 0), 0);
 
+    // Get user data for unique email counting
+    const user = await User.findOne({ clerkId: userId });
+    const totalListingsByEmail = user ? user.totalListings : products.length;
+
     const analytics = {
-      totalListings: products.length,
+      totalListings: totalListingsByEmail, // Use user's listing count
       soldItems: soldProducts.length,
       activeListings: activeProducts.length,
       totalRevenue,
-      views: totalViews,
+      views: totalViews, // Only seller/admin can see this
       averagePrice: products.length > 0 
         ? Math.round(products.reduce((sum, item) => sum + (item.price || 0), 0) / products.length)
         : 0,
@@ -309,7 +350,7 @@ export const incrementViewCount = async (req, res) => {
 };
 
 /* -----------------------------------------------------
-   UPDATE PRODUCT (Admin only - enhanced)
+   UPDATE PRODUCT (Admin only)
 ----------------------------------------------------- */
 export const updateProduct = async (req, res) => {
   try {
@@ -317,7 +358,8 @@ export const updateProduct = async (req, res) => {
     const clerkUserId = auth?.userId;
 
     // Only allow admins to edit products
-    if (clerkUserId !== 'admin') {
+    const isAdmin = await User.isAdmin(clerkUserId);
+    if (!isAdmin) {
       return res.status(403).json({ error: "Only administrators can edit products." });
     }
 
@@ -345,6 +387,38 @@ export const updateProduct = async (req, res) => {
   } catch (err) {
     console.error("UPDATE PRODUCT ERROR:", err);
     return res.status(500).json({ error: "Failed to update product." });
+  }
+};
+
+/* -----------------------------------------------------
+   ADMIN: GET ALL PRODUCTS (with user info)
+----------------------------------------------------- */
+export const getAllProductsAdmin = async (req, res) => {
+  try {
+    const auth = req.auth;
+    const clerkUserId = auth?.userId;
+
+    // Check if user is admin
+    const isAdmin = await User.isAdmin(clerkUserId);
+    if (!isAdmin) {
+      return res.status(403).json({ error: "Admin access required" });
+    }
+
+    const products = await Product.find({}).sort({ createdAt: -1 });
+
+    res.json({
+      success: true,
+      products: products.map(product => ({
+        ...product.toObject(),
+        sellerInfo: {
+          userId: product.userId,
+        }
+      }))
+    });
+
+  } catch (err) {
+    console.error("GET ALL PRODUCTS ADMIN ERROR:", err);
+    res.status(500).json({ error: "Failed to fetch products" });
   }
 };
 

@@ -10,6 +10,9 @@ export const syncUser = async (req, res) => {
     const name = firstName && lastName ? `${firstName} ${lastName}` : firstName || 'User';
     const avatar = imageUrl;
 
+    // Check if this should be an admin (based on email)
+    const isAdmin = await checkIfAdmin(email);
+
     let user = await User.findOne({ clerkId });
 
     if (!user) {
@@ -18,13 +21,21 @@ export const syncUser = async (req, res) => {
         email, 
         name, 
         avatar,
-        role: "user" 
+        role: isAdmin ? "admin" : "user",
+        lastLogin: new Date()
       });
     } else {
       // Update existing user
       user.email = email;
       user.name = name;
       user.avatar = avatar;
+      user.lastLogin = new Date();
+      
+      // Update role if email matches admin criteria
+      if (isAdmin && user.role !== 'admin') {
+        user.role = 'admin';
+      }
+      
       await user.save();
     }
 
@@ -35,7 +46,9 @@ export const syncUser = async (req, res) => {
         email: user.email,
         name: user.name,
         avatar: user.avatar,
-        role: user.role
+        role: user.role,
+        isAdmin: user.role === 'admin',
+        totalListings: user.totalListings || 0
       }
     });
 
@@ -47,3 +60,133 @@ export const syncUser = async (req, res) => {
     });
   }
 };
+
+// Get user profile
+export const getUserProfile = async (req, res) => {
+  try {
+    const auth = req.auth;
+    const clerkUserId = auth?.userId;
+    const { userId } = req.params;
+
+    // Users can only view their own profile unless admin
+    const isAdmin = await User.isAdmin(clerkUserId);
+    if (clerkUserId !== userId && !isAdmin) {
+      return res.status(403).json({ error: "Not authorized to view this profile" });
+    }
+
+    const user = await User.findOne({ clerkId: userId });
+    if (!user) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    res.json({
+      success: true,
+      user: {
+        id: user.clerkId,
+        email: user.email,
+        name: user.name,
+        avatar: user.avatar,
+        bio: user.bio,
+        role: user.role,
+        isActive: user.isActive,
+        totalListings: user.totalListings || 0,
+        joinedDate: user.createdAt,
+        lastLogin: user.lastLogin
+      }
+    });
+
+  } catch (err) {
+    console.error("GET USER PROFILE ERROR:", err);
+    res.status(500).json({ error: "Failed to fetch user profile" });
+  }
+};
+
+// Get all users (admin only)
+export const getAllUsers = async (req, res) => {
+  try {
+    const auth = req.auth;
+    const clerkUserId = auth?.userId;
+
+    // Check if user is admin
+    const isAdmin = await User.isAdmin(clerkUserId);
+    if (!isAdmin) {
+      return res.status(403).json({ error: "Admin access required" });
+    }
+
+    const users = await User.find({}).select('-__v').sort({ createdAt: -1 });
+    
+    res.json({
+      success: true,
+      users: users.map(user => ({
+        id: user.clerkId,
+        email: user.email,
+        name: user.name,
+        role: user.role,
+        isActive: user.isActive,
+        totalListings: user.totalListings || 0,
+        createdAt: user.createdAt,
+        lastLogin: user.lastLogin
+      }))
+    });
+
+  } catch (err) {
+    console.error("GET ALL USERS ERROR:", err);
+    res.status(500).json({ error: "Failed to fetch users" });
+  }
+};
+
+// Update user role (admin only)
+export const updateUserRole = async (req, res) => {
+  try {
+    const auth = req.auth;
+    const clerkUserId = auth?.userId;
+    const { userId } = req.params;
+    const { role } = req.body;
+
+    // Check if requester is admin
+    const isAdmin = await User.isAdmin(clerkUserId);
+    if (!isAdmin) {
+      return res.status(403).json({ error: "Admin access required" });
+    }
+
+    // Validate role
+    if (!['user', 'seller', 'admin'].includes(role)) {
+      return res.status(400).json({ error: "Invalid role" });
+    }
+
+    const user = await User.findOneAndUpdate(
+      { clerkId: userId },
+      { role },
+      { new: true }
+    );
+
+    if (!user) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    res.json({
+      success: true,
+      message: "User role updated successfully",
+      user: {
+        id: user.clerkId,
+        email: user.email,
+        name: user.name,
+        role: user.role
+      }
+    });
+
+  } catch (err) {
+    console.error("UPDATE USER ROLE ERROR:", err);
+    res.status(500).json({ error: "Failed to update user role" });
+  }
+};
+
+// Helper function to determine admin status
+async function checkIfAdmin(email) {
+  // You can define admin emails in environment variables
+  const adminEmails = process.env.ADMIN_EMAILS ? 
+    process.env.ADMIN_EMAILS.split(',') : 
+    ['admin@rummagebazaar.com', '0ndiritu@gmail.com'];
+  
+  return adminEmails.includes(email.toLowerCase());
+}

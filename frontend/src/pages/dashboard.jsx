@@ -17,6 +17,7 @@ import {
   UserGroupIcon,
   SparklesIcon,
   GiftIcon,
+  UserIcon,
 } from "@heroicons/react/24/outline";
 
 // Cache management utilities
@@ -74,6 +75,7 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState(null);
   const [error, setError] = useState(null);
+  const [userProfile, setUserProfile] = useState(null);
   const [analytics, setAnalytics] = useState({
     totalListings: 0,
     soldItems: 0,
@@ -123,20 +125,31 @@ export default function Dashboard() {
         if (cachedData) {
           setItems(cachedData.items || []);
           setAnalytics(cachedData.analytics || calculateAnalytics(cachedData.items || []));
+          setUserProfile(cachedData.userProfile || null);
         }
       }
 
       let userItems = [];
       let analyticsData = {};
+      let profileData = null;
 
       try {
-        // Load user's products - FIXED: pass null for body, token as last parameter
         const token = await session.getToken();
+        
+        // Load user's products
         const res = await api(`/products?userId=${user.id}`, "GET", null, token);
         userItems = Array.isArray(res) ? res : [];
         setItems(userItems);
 
-        // Try to load analytics from dedicated endpoint - FIXED: pass null for body
+        // Load user profile
+        try {
+          profileData = await api(`/users/profile/${user.id}`, "GET", null, token);
+          setUserProfile(profileData.user);
+        } catch (profileError) {
+          console.warn("Profile endpoint failed:", profileError);
+        }
+
+        // Try to load analytics from dedicated endpoint
         try {
           analyticsData = await api(`/products/analytics/seller/${user.id}`, "GET", null, token);
           setAnalytics(analyticsData);
@@ -151,6 +164,7 @@ export default function Dashboard() {
         DashboardCache.set({
           items: userItems,
           analytics: analyticsData,
+          userProfile: profileData?.user || null
         });
 
       } catch (fetchError) {
@@ -254,7 +268,7 @@ export default function Dashboard() {
               </p>
               {error && (
                 <div className="mt-2 p-3 bg-yellow-50 border border-yellow-200 rounded-lg text-yellow-700 text-sm">
-                  ⚠️ {error} {DashboardCache.get() && "(Showing cached data)"}
+                  {error} {DashboardCache.get() && "(Showing cached data)"}
                 </div>
               )}
             </div>
@@ -277,6 +291,47 @@ export default function Dashboard() {
             </div>
           </div>
         </div>
+
+        {/* User Profile Section */}
+        {userProfile && (
+          <section className="mb-8">
+            <div className="bg-white rounded-2xl shadow-lg p-6 border border-gray-100">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-4">
+                  <img
+                    src={userProfile.avatar || "/api/placeholder/100/100"}
+                    alt={userProfile.name}
+                    className="w-16 h-16 rounded-full object-cover border-2 border-emerald-200"
+                  />
+                  <div>
+                    <h2 className="text-xl font-bold text-gray-900">{userProfile.name}</h2>
+                    <p className="text-gray-600">{userProfile.email}</p>
+                    <div className="flex items-center gap-2 mt-1">
+                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                        userProfile.role === 'admin' 
+                          ? 'bg-purple-100 text-purple-800' 
+                          : 'bg-blue-100 text-blue-800'
+                      }`}>
+                        {userProfile.role?.toUpperCase()}
+                      </span>
+                      {isAdmin && (
+                        <span className="px-2 py-1 bg-green-100 text-green-800 rounded-full text-xs font-medium">
+                          ADMIN
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <p className="text-sm text-gray-600">Member since</p>
+                  <p className="text-gray-900 font-medium">
+                    {userProfile.joinedDate ? new Date(userProfile.joinedDate).toLocaleDateString() : 'Recently'}
+                  </p>
+                </div>
+              </div>
+            </div>
+          </section>
+        )}
 
         {/* Enhanced Analytics Cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-6 gap-6 mb-8">
@@ -333,6 +388,7 @@ export default function Dashboard() {
               <div>
                 <p className="text-sm font-medium text-gray-600">Total Views</p>
                 <p className="text-2xl font-bold text-orange-600 mt-1">{analytics.views}</p>
+                <p className="text-xs text-gray-500 mt-1">Your listings</p>
               </div>
               <div className="w-12 h-12 bg-orange-100 rounded-xl flex items-center justify-center">
                 <EyeIcon className="w-6 h-6 text-orange-600" />
@@ -427,7 +483,7 @@ export default function Dashboard() {
                       )}
                     </div>
                     
-                    {/* Views Counter */}
+                    {/* Views Counter - Only show to seller */}
                     <div className="mt-3 flex items-center justify-between text-sm text-gray-500">
                       <span>{p.views || 0} views</span>
                       {p.isDonation && (
@@ -471,15 +527,36 @@ export default function Dashboard() {
           </section>
         )}
 
-        {/* Information Section */}
-        <section className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-2xl p-8 border border-blue-100">
-          {/* ... your existing information section code ... */}
-        </section>
-
-        {/* Coming Soon Section */}
-        <section className="mt-8 bg-white rounded-2xl shadow-lg p-8 border border-gray-100">
-          {/* ... your existing coming soon section code ... */}
-        </section>
+        {/* Admin Panel Section */}
+        {isAdmin && (
+          <section className="mb-12">
+            <div className="bg-gradient-to-r from-purple-50 to-pink-50 rounded-2xl p-8 border border-purple-200">
+              <h2 className="text-2xl font-bold text-gray-900 mb-4 flex items-center gap-2">
+                <UserGroupIcon className="w-6 h-6 text-purple-600" />
+                Admin Panel
+              </h2>
+              <p className="text-gray-600 mb-6">
+                Access administrative features and manage platform content.
+              </p>
+              <div className="flex flex-wrap gap-3">
+                <Link 
+                  to="/admin/users" 
+                  className="bg-purple-600 text-white px-6 py-3 rounded-xl font-semibold hover:bg-purple-700 transition-colors flex items-center gap-2"
+                >
+                  <UserGroupIcon className="w-5 h-5" />
+                  Manage Users
+                </Link>
+                <Link 
+                  to="/admin/products" 
+                  className="bg-blue-600 text-white px-6 py-3 rounded-xl font-semibold hover:bg-blue-700 transition-colors flex items-center gap-2"
+                >
+                  <ShoppingBagIcon className="w-5 h-5" />
+                  Manage Products
+                </Link>
+              </div>
+            </div>
+          </section>
+        )}
       </div>
     </div>
   );

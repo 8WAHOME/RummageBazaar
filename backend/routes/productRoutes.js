@@ -9,33 +9,25 @@ import {
   deleteProduct,
   getSellerAnalytics,
   updateProduct,
-  incrementViewCount
+  incrementViewCount,
+  getAllProductsAdmin
 } from "../controllers/productController.js";
 
 const router = express.Router();
 
-// GET all products with advanced filtering
+// Public routes
 router.get("/", getProducts);
-
-// GET single product
 router.get("/:id", getProductById);
-
-// INCREMENT view count
 router.post("/:id/view", incrementViewCount);
 
-// CREATE product
+// Protected routes
 router.post("/", requireAuth(), createProduct);
-
-// MARK AS SOLD
 router.patch("/:id/sold", requireAuth(), markProductAsSold);
-
-// DELETE product
 router.delete("/:id", requireAuth(), deleteProduct);
-
-// GET seller analytics
 router.get("/analytics/seller/:userId", requireAuth(), getSellerAnalytics);
 
-// UPDATE product (admin only)
+// Admin only routes
+router.get("/admin/all", requireAuth(), getAllProductsAdmin);
 router.put("/:id", requireAuth(), updateProduct);
 
 export default router;
