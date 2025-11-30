@@ -21,7 +21,7 @@ export const syncUser = async (req, res) => {
         email, 
         name, 
         avatar,
-        role: isAdmin ? "admin" : "user",
+        role: isAdmin ? "admin" : "user", // Start as user, will become seller after first listing
         lastLogin: new Date()
       });
     } else {
@@ -58,6 +58,38 @@ export const syncUser = async (req, res) => {
       error: "Failed to sync user",
       details: process.env.NODE_ENV === 'development' ? err.message : undefined
     });
+  }
+};
+
+// Update user to seller role after first listing
+export const updateToSeller = async (req, res) => {
+  try {
+    const { userId } = req.params;
+
+    const user = await User.findOneAndUpdate(
+      { clerkId: userId, role: 'user' }, // Only update if currently a user
+      { role: 'seller' },
+      { new: true }
+    );
+
+    if (!user) {
+      return res.status(404).json({ error: "User not found or already a seller/admin" });
+    }
+
+    res.json({
+      success: true,
+      message: "User upgraded to seller successfully",
+      user: {
+        id: user.clerkId,
+        email: user.email,
+        name: user.name,
+        role: user.role
+      }
+    });
+
+  } catch (err) {
+    console.error("UPDATE TO SELLER ERROR:", err);
+    res.status(500).json({ error: "Failed to update user role" });
   }
 };
 

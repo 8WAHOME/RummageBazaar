@@ -10,13 +10,16 @@ import {
   getSellerAnalytics,
   updateProduct,
   incrementViewCount,
-  getAllProductsAdmin
+  getAllProductsAdmin,
+  deleteProductAdmin,
+  getProductsByLocation
 } from "../controllers/productController.js";
 
 const router = express.Router();
 
 // Public routes
 router.get("/", getProducts);
+router.get("/location", getProductsByLocation); // New location-based endpoint
 router.get("/:id", getProductById);
 router.post("/:id/view", incrementViewCount);
 
@@ -29,5 +32,6 @@ router.get("/analytics/seller/:userId", requireAuth(), getSellerAnalytics);
 // Admin only routes
 router.get("/admin/all", requireAuth(), getAllProductsAdmin);
 router.put("/:id", requireAuth(), updateProduct);
+router.delete("/admin/:id", requireAuth(), deleteProductAdmin);
 
 export default router;

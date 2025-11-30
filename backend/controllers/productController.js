@@ -4,31 +4,60 @@ import User from "../models/userModel.js";
 import mongoose from 'mongoose';
 
 /* -----------------------------------------------------
-   GET ALL PRODUCTS (with error handling for empty database)
+   GET ALL PRODUCTS (with location-based filtering)
 ----------------------------------------------------- */
 export const getProducts = async (req, res) => {
   try {
     console.log('GET /api/products called with query:', req.query);
     
-    const { userId, status, category, search } = req.query;
+    const { 
+      userId, 
+      status, 
+      category, 
+      search,
+      latitude,
+      longitude,
+      radius = 50, // Default 50km radius
+      location // For text-based location search
+    } = req.query;
     
     const filter = {};
     if (userId) filter.userId = userId;
     if (status) filter.status = status;
     if (category) filter.category = category;
     
+    // Text search
     if (search) {
       filter.$or = [
         { title: { $regex: search, $options: 'i' } },
-        { description: { $regex: search, $options: 'i' } }
+        { description: { $regex: search, $options: 'i' } },
+        { location: { $regex: search, $options: 'i' } }
       ];
+    }
+
+    // Location-based filtering
+    if (latitude && longitude) {
+      const maxDistance = parseInt(radius) * 1000; // Convert km to meters
+      
+      filter.coordinates = {
+        $near: {
+          $geometry: {
+            type: "Point",
+            coordinates: [parseFloat(longitude), parseFloat(latitude)]
+          },
+          $maxDistance: maxDistance
+        }
+      };
+    } else if (location) {
+      // Text-based location search
+      filter.location = { $regex: location, $options: 'i' };
     }
 
     // Check if Product collection exists and has documents
     const collectionExists = mongoose.connection.db.collection('products');
     if (!collectionExists) {
       console.log('Products collection does not exist yet');
-      return res.json([]); // Return empty array instead of error
+      return res.json([]);
     }
 
     const products = await Product.find(filter).sort({ createdAt: -1 });
@@ -40,7 +69,6 @@ export const getProducts = async (req, res) => {
   } catch (err) {
     console.error("GET PRODUCTS ERROR:", err);
     
-    // If it's a "collection not found" error, return empty array
     if (err.message.includes('collection') && err.message.includes('not found')) {
       return res.json([]);
     }
@@ -66,7 +94,7 @@ export const getProductById = async (req, res) => {
       return res.status(404).json({ error: "Product not found." });
     }
 
-    // Check if viewer is the seller
+    // Check if viewer is the seller or admin
     const isSeller = product.userId === clerkUserId;
     const isAdmin = await User.isAdmin(clerkUserId);
 
@@ -98,7 +126,7 @@ export const getProductById = async (req, res) => {
 };
 
 /* -----------------------------------------------------
-   CREATE PRODUCT (with user listing count update)
+   CREATE PRODUCT (with location coordinates and user upgrade)
 ----------------------------------------------------- */
 export const createProduct = async (req, res) => {
   try {
@@ -113,6 +141,7 @@ export const createProduct = async (req, res) => {
       countryCode,
       category,
       location,
+      coordinates, // { latitude, longitude }
       condition,
       images,
       isDonation
@@ -154,6 +183,7 @@ export const createProduct = async (req, res) => {
       return res.status(400).json({ error: "No valid images provided." });
     }
 
+    // Create the product with location data
     const product = await Product.create({
       title: title.trim(),
       description: description.trim(),
@@ -162,6 +192,7 @@ export const createProduct = async (req, res) => {
       countryCode: countryCode || "+254",
       category,
       location,
+      coordinates: coordinates || null, // Store coordinates if provided
       condition: condition || "good",
       images: uploadedImages,
       isDonation: isDonation || false,
@@ -170,18 +201,26 @@ export const createProduct = async (req, res) => {
       views: 0
     });
 
-    // Update user's listing count
-    await User.findOneAndUpdate(
+    // Update user's listing count and upgrade to seller if first listing
+    const userUpdate = await User.findOneAndUpdate(
       { clerkId: clerkUserId },
-      { $inc: { totalListings: 1 } }
+      { 
+        $inc: { totalListings: 1 },
+        ...(await shouldUpgradeToSeller(clerkUserId) && { role: 'seller' })
+      },
+      { new: true }
     );
 
     console.log(`Product created: ${product.title} by user ${clerkUserId}`);
+    if (userUpdate.role === 'seller') {
+      console.log(`User ${clerkUserId} upgraded to seller role`);
+    }
 
     return res.status(201).json({
       success: true,
       message: "Product listed successfully!",
-      product
+      product,
+      userUpgraded: userUpdate.role === 'seller'
     });
 
   } catch (err) {
@@ -191,7 +230,7 @@ export const createProduct = async (req, res) => {
 };
 
 /* -----------------------------------------------------
-   MARK AS SOLD (with enhanced authorization)
+   MARK AS SOLD (with enhanced authorization - FIXED ADMIN ACCESS)
 ----------------------------------------------------- */
 export const markProductAsSold = async (req, res) => {
   try {
@@ -233,7 +272,7 @@ export const markProductAsSold = async (req, res) => {
 };
 
 /* -----------------------------------------------------
-   DELETE PRODUCT (with enhanced authorization and user count update)
+   DELETE PRODUCT (with enhanced authorization - FIXED ADMIN ACCESS)
 ----------------------------------------------------- */
 export const deleteProduct = async (req, res) => {
   try {
@@ -289,7 +328,8 @@ export const getSellerAnalytics = async (req, res) => {
     const { userId } = req.params;
 
     // Verify the authenticated user is requesting their own analytics or is admin
-    if (clerkUserId !== userId && !(await User.isAdmin(clerkUserId))) {
+    const isAdmin = await User.isAdmin(clerkUserId);
+    if (clerkUserId !== userId && !isAdmin) {
       return res.status(403).json({ error: "Not authorized to view these analytics." });
     }
 
@@ -350,7 +390,7 @@ export const incrementViewCount = async (req, res) => {
 };
 
 /* -----------------------------------------------------
-   UPDATE PRODUCT (Admin only)
+   UPDATE PRODUCT (Admin only - FIXED)
 ----------------------------------------------------- */
 export const updateProduct = async (req, res) => {
   try {
@@ -422,6 +462,101 @@ export const getAllProductsAdmin = async (req, res) => {
   }
 };
 
+/* -----------------------------------------------------
+   GET PRODUCTS BY LOCATION (dedicated endpoint)
+----------------------------------------------------- */
+export const getProductsByLocation = async (req, res) => {
+  try {
+    const { latitude, longitude, radius = 50, category } = req.query;
+    
+    if (!latitude || !longitude) {
+      return res.status(400).json({ error: "Latitude and longitude are required" });
+    }
+
+    const maxDistance = parseInt(radius) * 1000; // Convert km to meters
+    
+    const filter = {
+      coordinates: {
+        $near: {
+          $geometry: {
+            type: "Point",
+            coordinates: [parseFloat(longitude), parseFloat(latitude)]
+          },
+          $maxDistance: maxDistance
+        }
+      },
+      status: "active"
+    };
+
+    if (category && category !== 'All') {
+      filter.category = category;
+    }
+
+    const products = await Product.find(filter)
+      .sort({ createdAt: -1 })
+      .limit(100); // Limit results for performance
+
+    console.log(`Found ${products.length} products within ${radius}km of [${latitude}, ${longitude}]`);
+
+    res.json({
+      success: true,
+      products,
+      location: {
+        latitude: parseFloat(latitude),
+        longitude: parseFloat(longitude),
+        radius: parseInt(radius)
+      },
+      count: products.length
+    });
+
+  } catch (err) {
+    console.error("GET PRODUCTS BY LOCATION ERROR:", err);
+    res.status(500).json({ error: "Failed to load products by location" });
+  }
+};
+
+// Helper function to check if user should be upgraded to seller
+async function shouldUpgradeToSeller(clerkUserId) {
+  const user = await User.findOne({ clerkId: clerkUserId });
+  if (!user) return false;
+  
+  // Don't upgrade admins
+  if (user.role === 'admin') return false;
+  
+  // Upgrade if this is their first listing (totalListings will be 0 before increment)
+  return user.totalListings === 0;
+}
+/* -----------------------------------------------------
+   ADMIN: DELETE ANY PRODUCT
+----------------------------------------------------- */
+export const deleteProductAdmin = async (req, res) => {
+  try {
+    const auth = req.auth;
+    const clerkUserId = auth?.userId;
+
+    // Check if user is admin
+    const isAdmin = await User.isAdmin(clerkUserId);
+    if (!isAdmin) {
+      return res.status(403).json({ error: "Admin access required" });
+    }
+
+    const productId = req.params.id;
+    const product = await Product.findByIdAndDelete(productId);
+
+    if (!product) {
+      return res.status(404).json({ error: "Product not found" });
+    }
+
+    res.json({
+      success: true,
+      message: "Product deleted by admin successfully"
+    });
+
+  } catch (err) {
+    console.error("DELETE PRODUCT ADMIN ERROR:", err);
+    res.status(500).json({ error: "Failed to delete product" });
+  }
+};
 // Delete product (DELETE /api/products/:id)
 // export const deleteProduct = async (req, res) => {
 //   try {

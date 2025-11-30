@@ -45,7 +45,7 @@ const categoryIcons = {
   'Pets & Animals': HeartIcon,
   'Health & Beauty': SparklesIcon,
   'Toys & Games': PuzzlePieceIcon,
-  'Baby & Kids': HeartIcon, // Using Heart icon for Baby & Kids
+  'Baby & Kids': HeartIcon,
   'Art & Collectibles': PaintBrushIcon,
   'Musical Instruments': MusicalNoteIcon,
   'Office Supplies': ScissorsIcon,
@@ -87,8 +87,55 @@ export default function CreateListing() {
   const [imagesBase64, setImagesBase64] = useState([]);
   const [loading, setLoading] = useState(false);
   const [isDonation, setIsDonation] = useState(false);
+  const [coordinates, setCoordinates] = useState(null);
+  const [gettingLocation, setGettingLocation] = useState(false);
 
   const maxImages = 6;
+
+  // Get user's current location
+  const getCurrentLocation = () => {
+    if (!navigator.geolocation) {
+      alert('Geolocation is not supported by your browser');
+      return;
+    }
+
+    setGettingLocation(true);
+    
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const { latitude, longitude } = position.coords;
+        setCoordinates({ latitude, longitude });
+        
+        // Reverse geocode to get address
+        reverseGeocode(latitude, longitude);
+        setGettingLocation(false);
+      },
+      (error) => {
+        console.error('Error getting location:', error);
+        alert('Unable to get your location. Please enter it manually.');
+        setGettingLocation(false);
+      },
+      { 
+        timeout: 10000,
+        enableHighAccuracy: true 
+      }
+    );
+  };
+
+  const reverseGeocode = async (lat, lng) => {
+    try {
+      const response = await fetch(
+        `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`
+      );
+      const data = await response.json();
+      
+      if (data.display_name) {
+        setForm(prev => ({ ...prev, location: data.display_name }));
+      }
+    } catch (error) {
+      console.error('Reverse geocoding error:', error);
+    }
+  };
 
   function onChange(e) {
     const { name, value, type, checked } = e.target;
@@ -128,6 +175,7 @@ export default function CreateListing() {
         images: imagesBase64,
         isDonation: !!isDonation,
         userId: user?.id,
+        coordinates: coordinates, // Include coordinates in the payload
       };
 
       const res = await api("/products", "POST", payload, token);
@@ -294,20 +342,63 @@ export default function CreateListing() {
           </label>
         </div>
 
-        {/* Location */}
-        <div>
-          <label className="block text-sm font-semibold text-gray-800 mb-2 flex items-center gap-2">
+        {/* Location Section */}
+        <div className="bg-white p-6 rounded-2xl border border-gray-200">
+          <label className="block text-sm font-semibold text-gray-800 mb-4 flex items-center gap-2">
             <MapPinIcon className="w-5 h-5 text-emerald-600" />
             Location *
           </label>
-          <input
-            name="location"
-            value={form.location}
-            onChange={onChange}
-            required
-            className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-            placeholder="Enter item location"
-          />
+          
+          <div className="space-y-4">
+            {/* Auto-detect Location Button */}
+            <button
+              type="button"
+              onClick={getCurrentLocation}
+              disabled={gettingLocation}
+              className="flex items-center gap-3 bg-blue-600 text-white px-6 py-3 rounded-xl font-semibold hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed w-full md:w-auto"
+            >
+              {gettingLocation ? (
+                <>
+                  <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                  Detecting Location...
+                </>
+              ) : (
+                <>
+                  <MapPinIcon className="w-5 h-5" />
+                  Use My Current Location
+                </>
+              )}
+            </button>
+
+            {/* Location Input */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Location Address *
+              </label>
+              <input
+                type="text"
+                name="location"
+                value={form.location}
+                onChange={onChange}
+                placeholder="Enter your location (e.g., Nairobi, Kenya)"
+                className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                required
+              />
+              <p className="text-sm text-gray-500 mt-1">
+                This helps buyers find items near them
+              </p>
+            </div>
+
+            {/* Coordinates Display */}
+            {coordinates && (
+              <div className="bg-green-50 border border-green-200 rounded-xl p-4">
+                <div className="flex items-center gap-2 text-green-700 text-sm">
+                  <CheckBadgeIcon className="w-4 h-4" />
+                  Location detected: {coordinates.latitude.toFixed(4)}, {coordinates.longitude.toFixed(4)}
+                </div>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Image Upload */}

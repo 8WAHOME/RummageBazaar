@@ -39,7 +39,7 @@ const categoryIcons = {
   'Pets & Animals': HeartIcon,
   'Health & Beauty': SparklesIcon,
   'Toys & Games': PuzzlePieceIcon,
-  'Baby & Kids': HeartIcon, // Using Heart icon for Baby & Kids
+  'Baby & Kids': HeartIcon,
   'Art & Collectibles': PaintBrushIcon,
   'Musical Instruments': MusicalNoteIcon,
   'Office Supplies': ScissorsIcon,
