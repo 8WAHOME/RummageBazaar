@@ -86,7 +86,9 @@ export default function Dashboard() {
     donationCount: 0,
   });
 
-  const isAdmin = Boolean(user?.publicMetadata?.role === "admin" || user?.publicMetadata?.role === "Admin");
+  // FIXED: Use MongoDB role from userProfile instead of Clerk metadata
+  const isAdmin = userProfile?.role === "admin";
+  const isSeller = userProfile?.role === "seller" || items.length > 0;
 
   // Calculate analytics from items (fallback)
   const calculateAnalytics = (itemsArray) => {
@@ -141,12 +143,34 @@ export default function Dashboard() {
         userItems = Array.isArray(res) ? res : [];
         setItems(userItems);
 
-        // Load user profile
+        // Load user profile - THIS IS CRITICAL FOR ROLE CHECK
         try {
-          profileData = await api(`/users/profile/${user.id}`, "GET", null, token);
-          setUserProfile(profileData.user);
+          const profileResponse = await api(`/users/profile/${user.id}`, "GET", null, token);
+          profileData = profileResponse;
+          setUserProfile(profileResponse.user);
+          console.log('🔐 USER PROFILE LOADED:', {
+            email: profileResponse.user?.email,
+            role: profileResponse.user?.role,
+            isAdmin: profileResponse.user?.role === 'admin'
+          });
         } catch (profileError) {
           console.warn("Profile endpoint failed:", profileError);
+          // If profile fails, try to sync user first
+          try {
+            await api("/users/sync", "POST", {
+              id: user.id,
+              email: user.primaryEmailAddress?.emailAddress,
+              firstName: user.firstName,
+              lastName: user.lastName,
+              imageUrl: user.imageUrl,
+            }, token);
+            console.log('🔄 User synced, retrying profile...');
+            const retryProfile = await api(`/users/profile/${user.id}`, "GET", null, token);
+            profileData = retryProfile;
+            setUserProfile(retryProfile.user);
+          } catch (syncError) {
+            console.error("User sync also failed:", syncError);
+          }
         }
 
         // Try to load analytics from dedicated endpoint
@@ -246,6 +270,32 @@ export default function Dashboard() {
     await load(false);
   };
 
+  // Force user sync if profile is missing
+  const forceUserSync = async () => {
+    if (!user?.id) return;
+    
+    try {
+      const token = await session.getToken();
+      const result = await api("/users/sync", "POST", {
+        id: user.id,
+        email: user.primaryEmailAddress?.emailAddress,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        imageUrl: user.imageUrl,
+      }, token);
+      
+      console.log('🔄 FORCE SYNC RESULT:', result);
+      alert(`User synced! Role: ${result.user.role}`);
+      
+      // Reload dashboard
+      DashboardCache.clear();
+      await load(false);
+    } catch (error) {
+      console.error('Force sync failed:', error);
+      alert('Sync failed: ' + error.message);
+    }
+  };
+
   // Filter items for display
   const activeItems = items.filter(item => item.status === "active");
   const soldItems = items.filter(item => item.status === "sold");
@@ -261,14 +311,31 @@ export default function Dashboard() {
           <div className="flex flex-col md:flex-row md:items-center md:justify-between">
             <div>
               <h1 className="text-3xl md:text-4xl font-bold text-gray-900">
-                Seller Dashboard
+                {isAdmin ? "Admin Dashboard" : "Seller Dashboard"}
               </h1>
               <p className="text-gray-600 mt-2">
-                Manage your listings and track your performance
+                {isAdmin 
+                  ? "Manage platform, users, and listings" 
+                  : "Manage your listings and track your performance"
+                }
               </p>
               {error && (
                 <div className="mt-2 p-3 bg-yellow-50 border border-yellow-200 rounded-lg text-yellow-700 text-sm">
                   {error} {DashboardCache.get() && "(Showing cached data)"}
+                </div>
+              )}
+              
+              {/* Debug info for admin issues */}
+              {user && !isAdmin && (
+                <div className="mt-2 p-2 bg-blue-50 border border-blue-200 rounded text-blue-700 text-xs">
+                  <p>Debug: Clerk ID: {user.id}</p>
+                  <p>MongoDB Role: {userProfile?.role || 'Not loaded'}</p>
+                  <button 
+                    onClick={forceUserSync}
+                    className="mt-1 bg-blue-500 text-white px-2 py-1 rounded text-xs"
+                  >
+                    Force Sync User
+                  </button>
                 </div>
               )}
             </div>
@@ -299,24 +366,26 @@ export default function Dashboard() {
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-4">
                   <img
-                    src={userProfile.avatar || "/api/placeholder/100/100"}
-                    alt={userProfile.name}
+                    src={userProfile.avatar || user.imageUrl || "/api/placeholder/100/100"}
+                    alt={userProfile.name || user.fullName}
                     className="w-16 h-16 rounded-full object-cover border-2 border-emerald-200"
                   />
                   <div>
-                    <h2 className="text-xl font-bold text-gray-900">{userProfile.name}</h2>
-                    <p className="text-gray-600">{userProfile.email}</p>
+                    <h2 className="text-xl font-bold text-gray-900">{userProfile.name || user.fullName}</h2>
+                    <p className="text-gray-600">{userProfile.email || user.primaryEmailAddress?.emailAddress}</p>
                     <div className="flex items-center gap-2 mt-1">
                       <span className={`px-2 py-1 rounded-full text-xs font-medium ${
                         userProfile.role === 'admin' 
                           ? 'bg-purple-100 text-purple-800' 
-                          : 'bg-blue-100 text-blue-800'
+                          : userProfile.role === 'seller'
+                          ? 'bg-blue-100 text-blue-800'
+                          : 'bg-gray-100 text-gray-800'
                       }`}>
-                        {userProfile.role?.toUpperCase()}
+                        {userProfile.role?.toUpperCase() || 'USER'}
                       </span>
                       {isAdmin && (
                         <span className="px-2 py-1 bg-green-100 text-green-800 rounded-full text-xs font-medium">
-                          ADMIN
+                          ADMIN PRIVILEGES
                         </span>
                       )}
                     </div>
@@ -327,6 +396,7 @@ export default function Dashboard() {
                   <p className="text-gray-900 font-medium">
                     {userProfile.joinedDate ? new Date(userProfile.joinedDate).toLocaleDateString() : 'Recently'}
                   </p>
+                  <p className="text-sm text-gray-600 mt-1">Listings: {analytics.totalListings}</p>
                 </div>
               </div>
             </div>
@@ -552,6 +622,13 @@ export default function Dashboard() {
                 >
                   <ShoppingBagIcon className="w-5 h-5" />
                   Manage Products
+                </Link>
+                <Link 
+                  to="/admin/analytics" 
+                  className="bg-green-600 text-white px-6 py-3 rounded-xl font-semibold hover:bg-green-700 transition-colors flex items-center gap-2"
+                >
+                  <ChartBarIcon className="w-5 h-5" />
+                  Platform Analytics
                 </Link>
               </div>
             </div>

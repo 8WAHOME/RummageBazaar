@@ -2,7 +2,7 @@ import mongoose from "mongoose";
 
 const productSchema = new mongoose.Schema(
   {
-    userId: { type: String, index: true, required: true }, // Clerk user id
+    userId: { type: String, index: true, required: true },
     sellerPhone: { type: String, required: true },
     title: { type: String, required: true, trim: true },
     description: { type: String, default: "" },
@@ -10,23 +10,26 @@ const productSchema = new mongoose.Schema(
     category: { type: String, required: true },
     condition: { type: String, default: "good" },
     
-    // Must be an array of Cloudinary image URLs
+    // Location fields for distance calculation
+    location: { type: String, default: "" },
+    coordinates: {
+      latitude: { type: Number },
+      longitude: { type: Number }
+    },
+    
     images: {
       type: [String],
       required: true,
     },
 
-    location: { type: String, default: "" },
     ecoScore: { type: Number, default: 0 },
     
-    // Updated status field with proper enum
     status: { 
       type: String, 
       default: "active", 
       enum: ["active", "sold", "inactive"] 
     },
     
-    // New fields for analytics
     views: { type: Number, default: 0 },
     soldAt: { type: Date },
     countryCode: { type: String, default: "+254" },
@@ -37,10 +40,10 @@ const productSchema = new mongoose.Schema(
 
 // Index for fast user product queries
 productSchema.index({ userId: 1, createdAt: -1 });
-// Index for status filtering
 productSchema.index({ status: 1 });
-// Index for sold items analytics
 productSchema.index({ status: 1, soldAt: -1 });
+// Geospatial index for location-based queries
+productSchema.index({ "coordinates": "2dsphere" });
 
 const Product = mongoose.model("Product", productSchema);
 export default Product;

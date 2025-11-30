@@ -215,10 +215,18 @@ export const updateUserRole = async (req, res) => {
 
 // Helper function to determine admin status
 async function checkIfAdmin(email) {
+  if (!email) return false;
+  
   // You can define admin emails in environment variables
   const adminEmails = process.env.ADMIN_EMAILS ? 
-    process.env.ADMIN_EMAILS.split(',') : 
-    ['admin@rummagebazaar.com', '0ndiritu@gmail.com'];
+    process.env.ADMIN_EMAILS.split(',').map(e => e.trim().toLowerCase()) : 
+    ['8wahome@gmail.com', '8ndiritu@gmail.com'];
   
-  return adminEmails.includes(email.toLowerCase());
+  console.log('Checking admin status for:', email.toLowerCase());
+  console.log('Admin emails:', adminEmails);
+  
+  const isAdmin = adminEmails.includes(email.toLowerCase());
+  console.log('Is admin?', isAdmin);
+  
+  return isAdmin;
 }
