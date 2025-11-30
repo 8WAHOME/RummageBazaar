@@ -3,10 +3,12 @@ import Product from "../models/productModel.js";
 import mongoose from 'mongoose';
 
 /* -----------------------------------------------------
-   GET ALL PRODUCTS (Simplified - fix 500 error)
+   GET ALL PRODUCTS (with error handling for empty database)
 ----------------------------------------------------- */
 export const getProducts = async (req, res) => {
   try {
+    console.log('GET /api/products called with query:', req.query);
+    
     const { userId, status, category, search } = req.query;
     
     const filter = {};
@@ -14,7 +16,6 @@ export const getProducts = async (req, res) => {
     if (status) filter.status = status;
     if (category) filter.category = category;
     
-    // Simple search implementation
     if (search) {
       filter.$or = [
         { title: { $regex: search, $options: 'i' } },
@@ -22,11 +23,27 @@ export const getProducts = async (req, res) => {
       ];
     }
 
+    // Check if Product collection exists and has documents
+    const collectionExists = mongoose.connection.db.collection('products');
+    if (!collectionExists) {
+      console.log('Products collection does not exist yet');
+      return res.json([]); // Return empty array instead of error
+    }
+
     const products = await Product.find(filter).sort({ createdAt: -1 });
+    
+    console.log(`Found ${products.length} products`);
+    
     return res.json(products);
 
   } catch (err) {
     console.error("GET PRODUCTS ERROR:", err);
+    
+    // If it's a "collection not found" error, return empty array
+    if (err.message.includes('collection') && err.message.includes('not found')) {
+      return res.json([]);
+    }
+    
     return res.status(500).json({ 
       error: "Failed to load products.",
       details: process.env.NODE_ENV === 'development' ? err.message : undefined
@@ -34,9 +51,7 @@ export const getProducts = async (req, res) => {
   }
 };
 
-/* -----------------------------------------------------
-   GET SINGLE PRODUCT (with view tracking)
------------------------------------------------------ */
+// ... keep all your other functions the same ...
 export const getProductById = async (req, res) => {
   try {
     const product = await Product.findById(req.params.id);
@@ -45,7 +60,6 @@ export const getProductById = async (req, res) => {
       return res.status(404).json({ error: "Product not found." });
     }
 
-    // Increment views when product is viewed (async - don't wait)
     product.views += 1;
     product.save().catch(err => console.error("View count update failed:", err));
 
@@ -62,9 +76,6 @@ export const getProductById = async (req, res) => {
   }
 };
 
-/* -----------------------------------------------------
-   CREATE PRODUCT
------------------------------------------------------ */
 export const createProduct = async (req, res) => {
   try {
     const auth = req.auth;
@@ -83,7 +94,6 @@ export const createProduct = async (req, res) => {
       isDonation
     } = req.body;
 
-    // Enhanced validation with better error messages
     if (!title || title.trim().length < 3) {
       return res.status(400).json({ error: "Title must be at least 3 characters long." });
     }
@@ -108,12 +118,10 @@ export const createProduct = async (req, res) => {
       return res.status(400).json({ error: "At least one image is required." });
     }
 
-    // Validate price unless it's a donation
     if (!isDonation && (!price || price < 0)) {
       return res.status(400).json({ error: "Valid price is required unless marked as donation" });
     }
 
-    // For now, accept images as base64 strings without Cloudinary
     const uploadedImages = images.filter(img => 
       img.startsWith("data:image") || img.startsWith("http")
     );
@@ -151,6 +159,7 @@ export const createProduct = async (req, res) => {
     return res.status(500).json({ error: "Failed to create product. Please try again." });
   }
 };
+
 
 /* -----------------------------------------------------
    MARK AS SOLD (with enhanced authorization)

@@ -21,14 +21,20 @@ app.use(cors());
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
-// MongoDB Connection
-const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/rummagebazaar';
+// MongoDB Connection - FIXED: Use MONGO_URI instead of MONGODB_URI
+const MONGODB_URI = process.env.MONGO_URI || 'mongodb://localhost:27017/rummagebazaar';
+
+console.log('Attempting MongoDB connection...');
+console.log('Database name in URI:', MONGODB_URI.includes('rummagebazzar') ? 'rummagebazzar' : 'unknown');
 
 mongoose.connect(MONGODB_URI)
-  .then(() => console.log('MongoDB connected'))
+  .then(() => {
+    console.log('MongoDB connected successfully');
+    console.log('Database:', mongoose.connection.db.databaseName);
+  })
   .catch(err => {
-    console.error('MongoDB connection error:', err);
-    // Don't exit process, just log error
+    console.error('MongoDB connection error:', err.message);
+    console.log('Please check your MONGO_URI environment variable');
   });
 
 // API Routes
@@ -37,12 +43,36 @@ app.use('/api/users', userRoutes);
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {
+  const dbStatus = mongoose.connection.readyState === 1 ? 'connected' : 'disconnected';
+  
   res.json({ 
     status: 'OK', 
     message: 'RummageBazaar API is running',
-    database: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected',
+    database: dbStatus,
+    databaseName: mongoose.connection.db?.databaseName || 'unknown',
     timestamp: new Date().toISOString()
   });
+});
+
+// Test endpoint to check database
+app.get('/api/debug/db', async (req, res) => {
+  try {
+    const db = mongoose.connection.db;
+    const collections = await db.listCollections().toArray();
+    const productCount = await mongoose.connection.db.collection('products').countDocuments();
+    
+    res.json({
+      database: db.databaseName,
+      collections: collections.map(c => c.name),
+      productCount: productCount,
+      connectionState: mongoose.connection.readyState
+    });
+  } catch (error) {
+    res.json({
+      error: error.message,
+      connectionState: mongoose.connection.readyState
+    });
+  }
 });
 
 // Static files - Multiple possible locations for Render deployment
@@ -107,13 +137,14 @@ app.get('*', (req, res) => {
     frontend: 'Frontend build not found. Please check deployment.',
     endpoints: [
       'GET /api/health - Health check',
+      'GET /api/debug/db - Database debug info',
       'GET /api/products - Get products',
       'POST /api/users/sync - Sync user'
     ]
   });
 });
 
-const PORT = process.env.PORT || 10000;
+const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
