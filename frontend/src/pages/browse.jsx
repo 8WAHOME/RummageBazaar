@@ -28,6 +28,8 @@ import {
   PlusIcon,
   XMarkIcon,
   MapPinIcon,
+  FunnelIcon,
+  ArrowPathIcon,
 } from "@heroicons/react/24/outline";
 
 // Icon mapping for categories
@@ -65,13 +67,21 @@ export default function Browse() {
   const [userLocation, setUserLocation] = useState(null);
   const [radius, setRadius] = useState(50); // Default 50km radius
   const [gettingLocation, setGettingLocation] = useState(false);
+  const [sortBy, setSortBy] = useState("newest");
 
-  // Load products with URL parameters
+  // Load products with URL parameters on component mount
   useEffect(() => {
     loadProducts();
   }, []);
 
-  // Update URL when filters change
+  // AUTO-REFRESH: Load products when filters change
+  useEffect(() => {
+    if (!loading) { // Prevent double load on initial render
+      loadProducts();
+    }
+  }, [category, locationFilter, userLocation, radius]);
+
+  // Update URL when filters change (without triggering reload)
   useEffect(() => {
     const params = new URLSearchParams();
     if (q) params.set('search', q);
@@ -81,18 +91,30 @@ export default function Browse() {
   }, [q, category, locationFilter, setSearchParams]);
 
   async function loadProducts() {
+    setLoading(true);
     try {
       let url = "/products";
       const params = new URLSearchParams();
       
-      if (searchParams.get('category') && searchParams.get('category') !== 'All') {
-        params.set('category', searchParams.get('category'));
+      if (category && category !== 'All') {
+        params.set('category', category);
       }
-      if (searchParams.get('search')) {
-        params.set('search', searchParams.get('search'));
+      if (q) {
+        params.set('search', q);
       }
-      if (searchParams.get('location')) {
-        params.set('location', searchParams.get('location'));
+      if (locationFilter) {
+        params.set('location', locationFilter);
+      }
+      
+      // If user location is available, use location-based search
+      if (userLocation) {
+        url = "/products/location";
+        params.set('latitude', userLocation.latitude);
+        params.set('longitude', userLocation.longitude);
+        params.set('radius', radius);
+        if (category && category !== 'All') {
+          params.set('category', category);
+        }
       }
       
       if (params.toString()) {
@@ -100,10 +122,11 @@ export default function Browse() {
       }
 
       const res = await api(url, "GET");
-      setProducts(Array.isArray(res) ? res : []);
+      setProducts(Array.isArray(res) ? res : (res.products || []));
     } catch (err) {
-      console.error("Browse load:", err);
+      console.error("Browse load error:", err);
       setProducts([]);
+      showNotification('Failed to load products', 'error');
     } finally {
       setLoading(false);
     }
@@ -112,7 +135,7 @@ export default function Browse() {
   // Get user's current location
   const getCurrentLocation = () => {
     if (!navigator.geolocation) {
-      alert('Geolocation is not supported by your browser');
+      showNotification('Geolocation is not supported by your browser', 'warning');
       return;
     }
 
@@ -122,54 +145,80 @@ export default function Browse() {
       async (position) => {
         const { latitude, longitude } = position.coords;
         setUserLocation({ latitude, longitude });
-        
-        try {
-          // Load products near user's location
-          const res = await api(`/products/location?latitude=${latitude}&longitude=${longitude}&radius=${radius}&category=${category}`);
-          setProducts(res.products || []);
-        } catch (err) {
-          console.error("Error loading nearby products:", err);
-        }
-        
         setGettingLocation(false);
+        showNotification('Location found! Showing nearby items', 'success');
       },
       (error) => {
         console.error('Error getting location:', error);
-        alert('Unable to get your location. Please allow location access or search by location name.');
+        let errorMessage = 'Unable to get your location. ';
+        
+        switch(error.code) {
+          case error.PERMISSION_DENIED:
+            errorMessage += 'Please allow location access in your browser settings.';
+            break;
+          case error.POSITION_UNAVAILABLE:
+            errorMessage += 'Location information is unavailable.';
+            break;
+          case error.TIMEOUT:
+            errorMessage += 'Location request timed out.';
+            break;
+          default:
+            errorMessage += 'Please try searching by location name instead.';
+        }
+        
+        showNotification(errorMessage, 'error');
         setGettingLocation(false);
       },
-      { timeout: 10000 }
+      { 
+        timeout: 10000,
+        enableHighAccuracy: true 
+      }
     );
   };
 
   const clearLocationFilter = () => {
     setUserLocation(null);
     setLocationFilter("");
-    loadProducts(); // Reload all products
+    showNotification('Location filter cleared', 'info');
   };
 
-  const filtered = products.filter((p) => {
-    if (category !== "All" && p.category !== category) return false;
-    if (!q && !locationFilter) return true;
-    
-    const searchText = `${p.title} ${p.description} ${p.category} ${p.location}`.toLowerCase();
-    const searchMatch = !q || searchText.includes(q.toLowerCase());
-    const locationMatch = !locationFilter || p.location.toLowerCase().includes(locationFilter.toLowerCase());
-    
-    return searchMatch && locationMatch;
-  });
+  const handleSearch = (e) => {
+    if (e.key === 'Enter' || e.type === 'click') {
+      loadProducts();
+    }
+  };
+
+  const handleCategorySelect = (selectedCategory) => {
+    setCategory(selectedCategory);
+    // Auto-refresh will happen via useEffect
+  };
 
   const clearFilters = () => {
     setQ("");
     setCategory("All");
     setLocationFilter("");
     setUserLocation(null);
+    setSortBy("newest");
     setSearchParams({});
+    showNotification('All filters cleared', 'info');
   };
 
-  const hasActiveFilters = q || category !== "All" || locationFilter || userLocation;
+  // Sort products based on selected option
+  const sortedProducts = [...products].sort((a, b) => {
+    switch (sortBy) {
+      case 'price-low':
+        return (a.price || 0) - (b.price || 0);
+      case 'price-high':
+        return (b.price || 0) - (a.price || 0);
+      case 'views':
+        return (b.views || 0) - (a.views || 0);
+      case 'newest':
+      default:
+        return new Date(b.createdAt) - new Date(a.createdAt);
+    }
+  });
 
-  if (loading) return <Loader />;
+  const hasActiveFilters = q || category !== "All" || locationFilter || userLocation;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-blue-50/20">
@@ -201,9 +250,18 @@ export default function Browse() {
                 <input
                   value={q}
                   onChange={(e) => setQ(e.target.value)}
+                  onKeyPress={handleSearch}
                   placeholder="Search by item, description, location..."
                   className="w-full border border-gray-300 rounded-xl px-4 py-3 pl-10 focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all duration-200"
                 />
+                {q && (
+                  <button
+                    onClick={() => setQ("")}
+                    className="absolute inset-y-0 right-0 pr-3 flex items-center"
+                  >
+                    <XMarkIcon className="h-5 w-5 text-gray-400 hover:text-gray-600" />
+                  </button>
+                )}
               </div>
             </div>
 
@@ -214,7 +272,7 @@ export default function Browse() {
               </label>
               <select 
                 value={category} 
-                onChange={(e) => setCategory(e.target.value)} 
+                onChange={(e) => handleCategorySelect(e.target.value)} 
                 className="w-full border border-gray-300 rounded-xl px-3 py-3 focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all duration-200"
               >
                 <option value="All">All Categories</option>
@@ -232,6 +290,7 @@ export default function Browse() {
               <input
                 value={locationFilter}
                 onChange={(e) => setLocationFilter(e.target.value)}
+                onKeyPress={handleSearch}
                 placeholder="City, area..."
                 className="w-full border border-gray-300 rounded-xl px-4 py-3 focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all duration-200"
               />
@@ -305,18 +364,28 @@ export default function Browse() {
 
           {/* Quick Category Filters */}
           <div className="mt-6">
-            <label className="block text-sm font-medium text-gray-700 mb-3">
-              Popular Categories
-            </label>
+            <div className="flex items-center justify-between mb-3">
+              <label className="block text-sm font-medium text-gray-700">
+                Popular Categories
+              </label>
+              <button
+                onClick={loadProducts}
+                disabled={loading}
+                className="flex items-center gap-2 text-sm text-emerald-600 hover:text-emerald-700 font-medium disabled:opacity-50"
+              >
+                <ArrowPathIcon className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+                Refresh
+              </button>
+            </div>
             <div className="flex flex-wrap gap-2">
               {popularCategories.map((catName) => (
                 <button
                   key={catName}
-                  onClick={() => setCategory(catName)}
+                  onClick={() => handleCategorySelect(catName)}
                   className={`px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
                     category === catName
-                      ? 'bg-emerald-600 text-white shadow-lg'
-                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                      ? 'bg-emerald-600 text-white shadow-lg transform scale-105'
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200 hover:scale-105'
                   }`}
                 >
                   {catName}
@@ -327,7 +396,7 @@ export default function Browse() {
         </div>
 
         {/* Results Header */}
-        <div className="flex items-center justify-between mb-8">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-8 gap-4">
           <div>
             <h2 className="text-2xl font-bold text-gray-900">
               {userLocation ? `Items Within ${radius}km` : category !== 'All' ? category : 'All'} Listings
@@ -335,20 +404,24 @@ export default function Browse() {
               {locationFilter && ` in ${locationFilter}`}
             </h2>
             <p className="text-gray-600 mt-1">
-              {filtered.length} {filtered.length === 1 ? 'item' : 'items'} found
-              {products.length !== filtered.length && ` (filtered from ${products.length} total)`}
+              {sortedProducts.length} {sortedProducts.length === 1 ? 'item' : 'items'} found
               {userLocation && ` near your location`}
+              {loading && ' (updating...)'}
             </p>
           </div>
           
           {/* Sort Options */}
           <div className="flex items-center gap-3">
-            <select className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-emerald-500 focus:border-transparent">
-              <option>Sort by: Newest</option>
-              <option>Sort by: Price Low to High</option>
-              <option>Sort by: Price High to Low</option>
-              <option>Sort by: Distance</option>
-              <option>Sort by: Most Viewed</option>
+            <FunnelIcon className="w-5 h-5 text-gray-400" />
+            <select 
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value)}
+              className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+            >
+              <option value="newest">Sort by: Newest</option>
+              <option value="price-low">Sort by: Price Low to High</option>
+              <option value="price-high">Sort by: Price High to Low</option>
+              <option value="views">Sort by: Most Viewed</option>
             </select>
           </div>
         </div>
@@ -374,17 +447,27 @@ export default function Browse() {
           </div>
         )}
 
+        {/* Loading State */}
+        {loading && (
+          <div className="flex justify-center py-12">
+            <div className="text-center">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-600 mx-auto mb-4"></div>
+              <p className="text-gray-600">Loading products...</p>
+            </div>
+          </div>
+        )}
+
         {/* Listings Grid */}
-        {filtered.length === 0 ? (
+        {!loading && sortedProducts.length === 0 ? (
           <div className="text-center py-16 bg-white rounded-2xl shadow-lg border border-gray-100">
             <div className="w-24 h-24 mx-auto mb-6 rounded-full bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center">
               <MagnifyingGlassIcon className="w-12 h-12 text-gray-400" />
             </div>
             <h3 className="text-2xl font-bold text-gray-900 mb-3">No listings found</h3>
             <p className="text-gray-600 mb-8 max-w-md mx-auto">
-              {q || category !== 'All' || locationFilter
+              {hasActiveFilters
                 ? "Try adjusting your search criteria or browse all categories."
-                : "Be the first to list an item in this category!"
+                : "No listings available yet. Be the first to list an item!"
               }
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
@@ -405,17 +488,22 @@ export default function Browse() {
             </div>
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-            {filtered.map((product) => (
-              <ProductCard key={product._id} item={product} />
-            ))}
-          </div>
+          !loading && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+              {sortedProducts.map((product) => (
+                <ProductCard key={product._id} item={product} />
+              ))}
+            </div>
+          )
         )}
 
         {/* Load More Section */}
-        {filtered.length > 0 && filtered.length >= 12 && (
+        {!loading && sortedProducts.length >= 12 && (
           <div className="text-center mt-12">
-            <button className="bg-white text-emerald-600 border-2 border-emerald-600 px-8 py-3 rounded-xl font-semibold hover:bg-emerald-600 hover:text-white transition-all duration-200 transform hover:scale-105 shadow-lg">
+            <button 
+              onClick={loadProducts}
+              className="bg-white text-emerald-600 border-2 border-emerald-600 px-8 py-3 rounded-xl font-semibold hover:bg-emerald-600 hover:text-white transition-all duration-200 transform hover:scale-105 shadow-lg"
+            >
               Load More Listings
             </button>
           </div>

@@ -16,6 +16,10 @@ import SignInPage from "./pages/login.jsx";
 import SignUpPage from "./pages/signup.jsx";
 import CreateListing from "./pages/createListing.jsx";
 import SsoCallback from "./pages/SsoCallback.jsx";
+// Add these new admin pages
+import AdminUsers from "./pages/admin/AdminUsers.jsx";
+import AdminProducts from "./pages/admin/AdminProducts.jsx";
+import AdminAnalytics from "./pages/admin/AdminAnalytics.jsx";
 
 function App() {
   const { user, isLoaded } = useUser();
@@ -134,6 +138,32 @@ function App() {
             element={
               <RequireAuth>
                 <CreateListing />
+              </RequireAuth>
+            }
+          />
+
+          {/* ADMIN ROUTES */}
+          <Route
+            path="/admin/users"
+            element={
+              <RequireAuth>
+                <AdminUsers />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/admin/products"
+            element={
+              <RequireAuth>
+                <AdminProducts />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/admin/analytics"
+            element={
+              <RequireAuth>
+                <AdminAnalytics />
               </RequireAuth>
             }
           />
