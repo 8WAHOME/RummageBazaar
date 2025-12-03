@@ -1,7 +1,9 @@
+// src/pages/CreateListing.jsx - FULLY UPDATED
 import React, { useState, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useClerk } from "@clerk/clerk-react";
 import { api } from "../utils/api.js";
+import { notification } from "../utils/notifications.js";
 import ImageUpload from "../components/ImageUpload.jsx";
 import { categories } from "../utils/categories.js";
 import {
@@ -68,7 +70,7 @@ export default function CreateListing() {
 
   useEffect(() => {
     if (editing) {
-      alert("Editing is prohibited to maintain listing quality.");
+      notification.error("Editing is prohibited to maintain listing quality.");
       navigate("/dashboard");
     }
   }, [editing, navigate]);
@@ -96,7 +98,7 @@ export default function CreateListing() {
   // Get user's current location
   const getCurrentLocation = () => {
     if (!navigator.geolocation) {
-      showNotification('Geolocation is not supported by your browser', 'warning');
+      notification.warning('Geolocation is not supported by your browser');
       return;
     }
 
@@ -129,7 +131,7 @@ export default function CreateListing() {
             errorMsg += 'Please enter your location manually.';
         }
         
-        showNotification(errorMsg, 'error');
+        notification.error(errorMsg);
         setGettingLocation(false);
       },
       { 
@@ -148,7 +150,7 @@ export default function CreateListing() {
       
       if (data.display_name) {
         setForm(prev => ({ ...prev, location: data.display_name }));
-        showNotification('Location detected successfully!', 'success');
+        notification.success('Location detected successfully!');
       }
     } catch (error) {
       console.error('Reverse geocoding error:', error);
@@ -165,145 +167,140 @@ export default function CreateListing() {
   }
 
   async function submit(e) {
-  e.preventDefault();
-  setLoading(true);
-  setErrorMessage("");
+    e.preventDefault();
+    setLoading(true);
+    setErrorMessage("");
 
-  // Validate required fields
-  if (
-    !form.title ||
-    !form.description ||
-    (!form.price && !isDonation) ||
-    !form.sellerPhone ||
-    !form.category ||
-    !form.location ||
-    imagesBase64.length === 0
-  ) {
-    showNotification(
-      "Please fill all required fields including location and at least one image.",
-      'error'
-    );
-    setLoading(false);
-    return;
-  }
+    // Validate required fields
+    if (
+      !form.title ||
+      !form.description ||
+      (!form.price && !isDonation) ||
+      !form.sellerPhone ||
+      !form.category ||
+      !form.location ||
+      imagesBase64.length === 0
+    ) {
+      notification.error(
+        "Please fill all required fields including location and at least one image."
+      );
+      setLoading(false);
+      return;
+    }
 
-  // Validate phone number
-  const phoneRegex = /^(0|7|1)\d{8}$/;
-  if (!phoneRegex.test(form.sellerPhone.replace(/\s/g, ''))) {
-    showNotification(
-      "Please enter a valid Kenyan phone number (10 digits starting with 0, 7, or 1)",
-      'error'
-    );
-    setLoading(false);
-    return;
-  }
+    // Validate phone number
+    const phoneRegex = /^(0|7|1)\d{8}$/;
+    if (!phoneRegex.test(form.sellerPhone.replace(/\s/g, ''))) {
+      notification.error(
+        "Please enter a valid Kenyan phone number (10 digits starting with 0, 7, or 1)"
+      );
+      setLoading(false);
+      return;
+    }
 
-  // Validate price if not donation
-  if (!isDonation && (Number(form.price) <= 0 || Number(form.price) > 100000000)) {
-    showNotification(
-      "Please enter a valid price between KSH 1 and KSH 100,000,000",
-      'error'
-    );
-    setLoading(false);
-    return;
-  }
+    // Validate price if not donation
+    if (!isDonation && (Number(form.price) <= 0 || Number(form.price) > 100000000)) {
+      notification.error(
+        "Please enter a valid price between KSH 1 and KSH 100,000,000"
+      );
+      setLoading(false);
+      return;
+    }
 
-  // Validate description length
-  if (form.description.length < 10) {
-    showNotification(
-      "Description must be at least 10 characters long",
-      'error'
-    );
-    setLoading(false);
-    return;
-  }
+    // Validate description length
+    if (form.description.length < 10) {
+      notification.error(
+        "Description must be at least 10 characters long"
+      );
+      setLoading(false);
+      return;
+    }
 
-  // Validate title length
-  if (form.title.length < 3) {
-    showNotification(
-      "Title must be at least 3 characters long",
-      'error'
-    );
-    setLoading(false);
-    return;
-  }
+    // Validate title length
+    if (form.title.length < 3) {
+      notification.error(
+        "Title must be at least 3 characters long"
+      );
+      setLoading(false);
+      return;
+    }
 
-  try {
-    const token = await session.getToken();
+    try {
+      const token = await session.getToken();
 
-    const payload = {
-      ...form,
-      price: isDonation ? 0 : Number(form.price || 0),
-      images: imagesBase64,
-      isDonation: !!isDonation,
-      userId: user?.id,
-      coordinates: coordinates,
-    };
+      const payload = {
+        ...form,
+        price: isDonation ? 0 : Number(form.price || 0),
+        images: imagesBase64,
+        isDonation: !!isDonation,
+        userId: user?.id,
+        coordinates: coordinates,
+      };
 
-    console.log('Creating listing with payload:', {
-      ...payload,
-      images: `[${payload.images.length} images]`
-    });
+      console.log('Creating listing with payload:', {
+        ...payload,
+        images: `[${payload.images.length} images]`
+      });
 
-    const res = await api("/products", "POST", payload, token);
-    console.log('Server response:', res);
+      const res = await api("/products", "POST", payload, token);
+      console.log('Server response:', res);
 
-    // Handle different response formats
-    if (res?.success) {
-      const productId = res._id || res.product?._id;
-      
-      if (productId) {
-        showNotification(
-          `🎉 Listing created successfully! ${res.userUpgraded ? 'You are now a verified seller!' : ''}`,
-          'success'
-        );
+      // Handle different response formats
+      if (res?.success) {
+        const productId = res._id || res.product?._id;
         
-        // Clear form
-        setForm({
-          title: "",
-          description: "",
-          price: "",
-          sellerPhone: "",
-          countryCode: "+254",
-          category: "",
-          condition: "good",
-          location: "",
-        });
-        setImagesBase64([]);
-        setIsDonation(false);
-        setCoordinates(null);
-        
-        // Navigate to the product page with success state
-        setTimeout(() => {
-          navigate(`/products/${productId}?created=true`);
-        }, 1500);
+        if (productId) {
+          notification.success(
+            `🎉 Listing created successfully! ${res.userUpgraded ? 'You are now a verified seller!' : ''}`
+          );
+          
+          // Clear form
+          setForm({
+            title: "",
+            description: "",
+            price: "",
+            sellerPhone: "",
+            countryCode: "+254",
+            category: "",
+            condition: "good",
+            location: "",
+          });
+          setImagesBase64([]);
+          setIsDonation(false);
+          setCoordinates(null);
+          
+          // Navigate to the product page with success state
+          setTimeout(() => {
+            navigate(`/products/${productId}?created=true`);
+          }, 1500);
+        } else {
+          notification.warning('Listing created but no product ID returned.');
+          navigate("/dashboard");
+        }
       } else {
-        showNotification('Listing created but no product ID returned.', 'warning');
-        navigate("/dashboard");
+        notification.error(res?.error || 'Failed to create listing');
       }
-    } else {
-      showNotification(res?.error || 'Failed to create listing', 'error');
-    }
 
-  } catch (err) {
-    console.error("Create listing error:", err);
-    
-    let errorMsg = "Could not create listing. Please try again.";
-    if (err.message) {
-      try {
-        const errorData = JSON.parse(err.message);
-        errorMsg = errorData.error || errorMsg;
-      } catch {
-        errorMsg = err.message || errorMsg;
+    } catch (err) {
+      console.error("Create listing error:", err);
+      
+      let errorMsg = "Could not create listing. Please try again.";
+      if (err.message) {
+        try {
+          const errorData = JSON.parse(err.message);
+          errorMsg = errorData.error || errorMsg;
+        } catch {
+          errorMsg = err.message || errorMsg;
+        }
       }
+      
+      notification.error(errorMsg);
+      setErrorMessage(errorMsg);
+    } finally {
+      setLoading(false);
     }
-    
-    showNotification(errorMsg, 'error');
-    setErrorMessage(errorMsg);
-  } finally {
-    setLoading(false);
   }
-}
+
   return (
     <div className="max-w-4xl mx-auto p-8 bg-gray-50 min-h-screen">
       <div className="text-center mb-8">

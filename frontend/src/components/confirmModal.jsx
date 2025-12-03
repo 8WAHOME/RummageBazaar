@@ -2,9 +2,6 @@
 import React from 'react';
 import { 
   ExclamationTriangleIcon,
-  CheckCircleIcon,
-  InformationCircleIcon,
-  XCircleIcon,
   XMarkIcon 
 } from '@heroicons/react/24/outline';
 
@@ -12,7 +9,7 @@ const ConfirmModal = ({
   isOpen, 
   onClose, 
   onConfirm, 
-  title, 
+  title = "Confirm Action", 
   message, 
   confirmText = "Confirm", 
   cancelText = "Cancel",
@@ -20,35 +17,8 @@ const ConfirmModal = ({
 }) => {
   if (!isOpen) return null;
 
-  const iconConfig = {
-    warning: {
-      icon: ExclamationTriangleIcon,
-      iconColor: "text-yellow-400",
-      bgColor: "bg-yellow-50",
-      buttonColor: "bg-yellow-600 hover:bg-yellow-700",
-    },
-    danger: {
-      icon: XCircleIcon,
-      iconColor: "text-red-400",
-      bgColor: "bg-red-50",
-      buttonColor: "bg-red-600 hover:bg-red-700",
-    },
-    info: {
-      icon: InformationCircleIcon,
-      iconColor: "text-blue-400",
-      bgColor: "bg-blue-50",
-      buttonColor: "bg-blue-600 hover:bg-blue-700",
-    },
-    success: {
-      icon: CheckCircleIcon,
-      iconColor: "text-green-400",
-      bgColor: "bg-green-50",
-      buttonColor: "bg-green-600 hover:bg-green-700",
-    }
-  };
-
-  const config = iconConfig[type] || iconConfig.warning;
-  const Icon = config.icon;
+  const iconColor = type === "danger" ? "text-red-400" : "text-amber-400";
+  const buttonColor = type === "danger" ? "bg-red-600 hover:bg-red-700" : "bg-amber-600 hover:bg-amber-700";
 
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto">
@@ -71,8 +41,8 @@ const ConfirmModal = ({
 
           {/* Icon */}
           <div className="flex justify-center mb-4">
-            <div className={`w-16 h-16 rounded-full ${config.bgColor} flex items-center justify-center`}>
-              <Icon className={`w-10 h-10 ${config.iconColor}`} />
+            <div className="w-16 h-16 rounded-full bg-amber-100 flex items-center justify-center">
+              <ExclamationTriangleIcon className={`w-10 h-10 ${iconColor}`} />
             </div>
           </div>
 
@@ -95,7 +65,7 @@ const ConfirmModal = ({
                 onConfirm();
                 onClose();
               }}
-              className={`flex-1 px-4 py-3 ${config.buttonColor} text-white rounded-xl font-semibold transition-colors`}
+              className={`flex-1 px-4 py-3 ${buttonColor} text-white rounded-xl font-semibold transition-colors`}
             >
               {confirmText}
             </button>

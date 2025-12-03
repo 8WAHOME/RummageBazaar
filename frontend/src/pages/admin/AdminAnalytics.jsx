@@ -3,7 +3,7 @@ import React, { useEffect, useState } from "react";
 import { useClerk } from "@clerk/clerk-react";
 import { api, parseApiError } from "../../utils/api.js";
 import Loader from "../../components/loader.jsx";
-import Notification from "../../components/Notification.jsx";
+import Notification from "../../components/notification.jsx";
 import {
   ChartBarIcon,
   ShoppingBagIcon,

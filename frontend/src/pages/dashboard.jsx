@@ -1,12 +1,12 @@
-// src/pages/dashboard.jsx
+// src/pages/dashboard.jsx - FULLY UPDATED VERSION
 import React, { useEffect, useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { useClerk } from "@clerk/clerk-react";
 import { api, parseApiError } from "../utils/api.js";
+import { notification } from "../utils/notifications.js";
 import ProductCard from "../components/productCard.jsx";
 import Loader from "../components/loader.jsx";
 import ConfirmModal from "../components/confirmModal.jsx";
-import Notification from "../components/notification.jsx";
 import {
   ChartBarIcon,
   ShoppingBagIcon,
@@ -20,7 +20,6 @@ import {
   UserGroupIcon,
   SparklesIcon,
   GiftIcon,
-  ExclamationTriangleIcon,
 } from "@heroicons/react/24/outline";
 
 // Cache management utilities
@@ -35,7 +34,6 @@ const DashboardCache = {
 
       const { data, timestamp } = JSON.parse(cached);
       
-      // Check if cache is expired
       if (Date.now() - timestamp > this.TTL) {
         this.clear();
         return null;
@@ -97,14 +95,7 @@ export default function Dashboard() {
     confirmText: "Confirm",
     cancelText: "Cancel",
     onConfirm: () => {},
-    type: "warning" // warning, danger, info
-  });
-
-  // Notification state
-  const [notification, setNotification] = useState({
-    show: false,
-    message: "",
-    type: "info" // success, error, info, warning
+    type: "warning"
   });
 
   // FIXED: Use MongoDB role from userProfile instead of Clerk metadata
@@ -131,21 +122,6 @@ export default function Dashboard() {
     };
   };
 
-  // Show notification helper
-  const showNotification = (message, type = "info") => {
-    setNotification({
-      show: true,
-      message,
-      type
-    });
-
-    // Auto-hide after 3 seconds for success/info, 5 seconds for error/warning
-    const duration = type === "error" || type === "warning" ? 5000 : 3000;
-    setTimeout(() => {
-      setNotification(prev => ({ ...prev, show: false }));
-    }, duration);
-  };
-
   // Show confirm modal helper
   const showConfirm = (config) => {
     setModalConfig(config);
@@ -163,7 +139,6 @@ export default function Dashboard() {
     setError(null);
 
     try {
-      // Try to load from cache first for immediate display
       if (useCache) {
         const cachedData = DashboardCache.get();
         if (cachedData) {
@@ -185,19 +160,13 @@ export default function Dashboard() {
         userItems = Array.isArray(res?.products) ? res.products : (Array.isArray(res) ? res : []);
         setItems(userItems);
 
-        // Load user profile - THIS IS CRITICAL FOR ROLE CHECK
+        // Load user profile
         try {
           const profileResponse = await api(`/users/profile/${user.id}`, "GET", null, token);
           profileData = profileResponse;
           setUserProfile(profileResponse.user);
-          console.log('🔐 USER PROFILE LOADED:', {
-            email: profileResponse.user?.email,
-            role: profileResponse.user?.role,
-            isAdmin: profileResponse.user?.role === 'admin'
-          });
         } catch (profileError) {
           console.warn("Profile endpoint failed:", profileError);
-          // If profile fails, try to sync user first
           try {
             await api("/users/sync", "POST", {
               id: user.id,
@@ -206,7 +175,6 @@ export default function Dashboard() {
               lastName: user.lastName,
               imageUrl: user.imageUrl,
             }, token);
-            console.log('🔄 User synced, retrying profile...');
             const retryProfile = await api(`/users/profile/${user.id}`, "GET", null, token);
             profileData = retryProfile;
             setUserProfile(retryProfile.user);
@@ -221,7 +189,6 @@ export default function Dashboard() {
           setAnalytics(analyticsData);
         } catch (analyticsError) {
           console.warn("Analytics endpoint failed, calculating locally:", analyticsError);
-          // Fallback to client-side calculation
           analyticsData = calculateAnalytics(userItems);
           setAnalytics(analyticsData);
         }
@@ -243,10 +210,9 @@ export default function Dashboard() {
       const parsedError = parseApiError(err);
       setError(parsedError.message || "Failed to load dashboard data");
       
-      // If we have cached data, use it even if fetch failed
       const cachedData = DashboardCache.get();
       if (!cachedData) {
-        showNotification("Unable to load dashboard data. Please check your connection.", "error");
+        notification.error("Unable to load dashboard data. Please check your connection.");
       }
     } finally {
       setLoading(false);
@@ -254,13 +220,12 @@ export default function Dashboard() {
   }
 
   useEffect(() => {
-    load(true); // Enable cache on initial load
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    load(true);
   }, [user?.id]);
 
   const markAsSold = async (productId, productTitle) => {
     if (!user?.id) {
-      showNotification('Please sign in to continue', 'error');
+      notification.error('Please sign in to continue');
       return;
     }
 
@@ -277,16 +242,14 @@ export default function Dashboard() {
           const result = await api(`/products/${productId}/sold`, "PATCH", {}, token);
           
           if (result?.success) {
-            // Update local state immediately for better UX
             setItems((prev) => prev.map((p) => 
               p._id === productId ? { ...p, status: "sold", soldAt: new Date() } : p
             ));
             
-            // Clear cache and reload fresh data
             DashboardCache.clear();
             await load(false);
             
-            showNotification('Product marked as sold successfully!', 'success');
+            notification.success('Product marked as sold successfully!');
           } else {
             throw new Error(result?.error || 'Failed to mark as sold');
           }
@@ -294,7 +257,7 @@ export default function Dashboard() {
         } catch (err) {
           console.error("Mark sold error:", err);
           const parsedError = parseApiError(err);
-          showNotification(parsedError.message || "Failed to mark as sold", 'error');
+          notification.error(parsedError.message || "Failed to mark as sold");
         } finally {
           setBusyId(null);
         }
@@ -304,7 +267,7 @@ export default function Dashboard() {
 
   const removeListing = async (productId, productTitle) => {
     if (!user?.id) {
-      showNotification('Please sign in to continue', 'error');
+      notification.error('Please sign in to continue');
       return;
     }
 
@@ -320,20 +283,13 @@ export default function Dashboard() {
           const token = await session.getToken();
           const result = await api(`/products/${productId}`, "DELETE", null, token);
           
-          console.log('Delete result:', result);
-          
           if (result?.success) {
-            // Update local state immediately
             setItems((prev) => prev.filter((p) => p._id !== productId));
             
-            // Clear cache and reload
             DashboardCache.clear();
             await load(false);
             
-            showNotification(
-              `Listing "${productTitle}" deleted successfully`, 
-              'success'
-            );
+            notification.success(`Listing "${productTitle}" deleted successfully`);
           } else {
             throw new Error(result?.error || 'Failed to delete');
           }
@@ -341,7 +297,7 @@ export default function Dashboard() {
         } catch (err) {
           console.error("Delete error:", err);
           const parsedError = parseApiError(err);
-          showNotification(parsedError.message || "Failed to delete listing", 'error');
+          notification.error(parsedError.message || "Failed to delete listing");
         } finally {
           setBusyId(null);
         }
@@ -352,7 +308,7 @@ export default function Dashboard() {
   const handleRefresh = async () => {
     DashboardCache.clear();
     await load(false);
-    showNotification('Dashboard refreshed with latest data', 'success');
+    notification.success('Dashboard refreshed with latest data');
   };
 
   // Force user sync if profile is missing
@@ -369,8 +325,7 @@ export default function Dashboard() {
         imageUrl: user.imageUrl,
       }, token);
       
-      console.log('🔄 FORCE SYNC RESULT:', result);
-      showNotification(`User synced successfully! Role: ${result.user?.role || 'user'}`, 'success');
+      notification.success(`User synced successfully! Role: ${result.user?.role || 'user'}`);
       
       // Reload dashboard
       DashboardCache.clear();
@@ -378,7 +333,7 @@ export default function Dashboard() {
     } catch (error) {
       console.error('Force sync failed:', error);
       const parsedError = parseApiError(error);
-      showNotification('Sync failed: ' + parsedError.message, 'error');
+      notification.error('Sync failed: ' + parsedError.message);
     }
   };
 
@@ -734,14 +689,6 @@ export default function Dashboard() {
         confirmText={modalConfig.confirmText}
         cancelText={modalConfig.cancelText}
         type={modalConfig.type}
-      />
-
-      {/* Notification */}
-      <Notification
-        show={notification.show}
-        message={notification.message}
-        type={notification.type}
-        onClose={() => setNotification(prev => ({ ...prev, show: false }))}
       />
     </>
   );

@@ -1,10 +1,11 @@
-// src/pages/Browse.jsx
+// src/pages/Browse.jsx - FULLY UPDATED
 import React, { useEffect, useState } from "react";
 import { api } from "../utils/api.js";
 import { Link, useSearchParams } from "react-router-dom";
 import Loader from "../components/loader.jsx";
 import ProductCard from "../components/productCard.jsx";
 import { categories, popularCategories } from "../utils/categories.js";
+import { notification } from "../utils/notifications.js";
 import {
   DevicePhoneMobileIcon,
   HomeModernIcon,
@@ -56,12 +57,6 @@ const categoryIcons = {
   'Agriculture & Farming': TruckIcon,
   'Industrial Equipment': CogIcon,
   'Other': CubeIcon,
-};
-
-// Simple notification helper
-const showNotification = (message, type = 'info') => {
-  console.log(`${type}: ${message}`);
-  // You can implement a proper notification system here
 };
 
 export default function Browse() {
@@ -131,9 +126,7 @@ export default function Browse() {
         url += `?${params.toString()}`;
       }
 
-      console.log("Fetching from:", url); // Debug
       const res = await api(url, "GET");
-      console.log("Browse API Response:", res); // Debug
       
       // Handle different response formats
       let productsData = [];
@@ -165,7 +158,7 @@ export default function Browse() {
     } catch (err) {
       console.error("Browse load error:", err);
       setProducts([]);
-      showNotification('Failed to load products', 'error');
+      notification.error('Failed to load products');
     } finally {
       setLoading(false);
     }
@@ -174,7 +167,7 @@ export default function Browse() {
   // Get user's current location
   const getCurrentLocation = () => {
     if (!navigator.geolocation) {
-      showNotification('Geolocation is not supported by your browser', 'warning');
+      notification.warning('Geolocation is not supported by your browser');
       return;
     }
 
@@ -185,7 +178,7 @@ export default function Browse() {
         const { latitude, longitude } = position.coords;
         setUserLocation({ latitude, longitude });
         setGettingLocation(false);
-        showNotification('Location found! Showing nearby items', 'success');
+        notification.success('Location found! Showing nearby items');
       },
       (error) => {
         console.error('Error getting location:', error);
@@ -205,7 +198,7 @@ export default function Browse() {
             errorMessage += 'Please try searching by location name instead.';
         }
         
-        showNotification(errorMessage, 'error');
+        notification.error(errorMessage);
         setGettingLocation(false);
       },
       { 
@@ -218,7 +211,7 @@ export default function Browse() {
   const clearLocationFilter = () => {
     setUserLocation(null);
     setLocationFilter("");
-    showNotification('Location filter cleared', 'info');
+    notification.info('Location filter cleared');
   };
 
   const handleSearch = (e) => {
@@ -238,7 +231,7 @@ export default function Browse() {
     setUserLocation(null);
     setSortBy("newest");
     setSearchParams({});
-    showNotification('All filters cleared', 'info');
+    notification.info('All filters cleared');
   };
 
   // Sort products based on selected option

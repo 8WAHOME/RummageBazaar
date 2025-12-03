@@ -1,11 +1,13 @@
 import { Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { api } from "./utils/api.js";
+import { notification } from "./utils/notifications.js";
 import { SignedIn, SignedOut, RedirectToSignIn, useUser } from "@clerk/clerk-react";
 
 import Navbar from "./components/navbar.jsx";
 import Footer from "./components/footer.jsx";
 import Loader from "./components/loader.jsx";
+import Notification from "./components/notification.jsx";
 
 import Home from "./pages/home.jsx";
 import Browse from "./pages/browse.jsx";
@@ -45,7 +47,10 @@ function App() {
         username: user.username
       })
       .then(() => console.log("User synced successfully"))
-      .catch(err => console.warn("User sync warning:", err.message));
+      .catch(err => {
+        console.warn("User sync warning:", err.message);
+        notification.warning("User sync incomplete - some features may be limited");
+      });
     }
   }, [user, isLoaded]);
 
@@ -65,6 +70,9 @@ function App() {
     <div className="min-h-screen flex flex-col bg-gray-50">
       {/* Navigation Bar */}
       <Navbar />
+
+      {/* Global Notification */}
+      <Notification />
 
       {/* Loading Overlay */}
       {loading && (

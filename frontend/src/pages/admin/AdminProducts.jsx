@@ -1,7 +1,8 @@
-// src/pages/admin/AdminProducts.jsx
+// src/pages/admin/AdminProducts.jsx - FULLY UPDATED
 import React, { useState, useEffect } from 'react';
 import { useClerk } from '@clerk/clerk-react';
 import { api, parseApiError } from '../../utils/api';
+import { notification } from '../../utils/notifications.js';
 import Loader from '../../components/loader';
 import {
   ShoppingBagIcon,
@@ -22,6 +23,7 @@ export default function AdminProducts() {
   const [statusFilter, setStatusFilter] = useState('all');
   const [categoryFilter, setCategoryFilter] = useState('all');
   const [error, setError] = useState(null);
+  const [deletingId, setDeletingId] = useState(null);
 
   const loadProducts = async () => {
     try {
@@ -29,8 +31,6 @@ export default function AdminProducts() {
       setError(null);
       const token = await session.getToken();
       const response = await api('/products/admin/all', 'GET', null, token);
-      
-      console.log("Admin products response:", response);
       
       if (response?.success) {
         setProducts(response.products || []);
@@ -43,28 +43,38 @@ export default function AdminProducts() {
       console.error('Failed to load products:', error);
       const parsedError = parseApiError(error);
       setError(parsedError.message);
+      notification.error(parsedError.message || 'Failed to load products');
     } finally {
       setLoading(false);
     }
   };
 
-  const deleteProduct = async (productId) => {
-    if (!window.confirm('Are you sure you want to delete this product? This action cannot be undone.')) return;
+  const deleteProduct = async (productId, productTitle) => {
+    if (!window.confirm(`Are you sure you want to delete "${productTitle}"? This action cannot be undone.`)) return;
     
+    setDeletingId(productId);
     try {
       const token = await session.getToken();
-      await api(`/products/admin/${productId}`, 'DELETE', null, token);
-      alert('Product deleted successfully');
-      loadProducts();
+      const result = await api(`/products/admin/${productId}`, 'DELETE', null, token);
+      
+      if (result?.success) {
+        setProducts(prev => prev.filter(p => p._id !== productId));
+        notification.success(`"${productTitle}" deleted successfully`);
+      } else {
+        throw new Error(result?.error || 'Failed to delete product');
+      }
     } catch (error) {
       console.error('Failed to delete product:', error);
       const parsedError = parseApiError(error);
-      alert('Failed to delete product: ' + parsedError.message);
+      notification.error('Failed to delete product: ' + parsedError.message);
+    } finally {
+      setDeletingId(null);
     }
   };
 
   const handleRefresh = () => {
     loadProducts();
+    notification.info('Refreshing products...');
   };
 
   useEffect(() => {
@@ -162,6 +172,7 @@ export default function AdminProducts() {
                     setSearchTerm('');
                     setStatusFilter('all');
                     setCategoryFilter('all');
+                    notification.info('Filters cleared');
                   }}
                   className="px-4 py-3 border border-gray-300 text-gray-700 rounded-xl hover:bg-gray-50 transition-colors flex items-center gap-2"
                 >
@@ -254,10 +265,15 @@ export default function AdminProducts() {
                       </a>
                     )}
                     <button
-                      onClick={() => deleteProduct(product._id)}
-                      className="px-3 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors flex items-center justify-center"
+                      onClick={() => deleteProduct(product._id, product.title)}
+                      disabled={deletingId === product._id}
+                      className="px-3 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50 flex items-center justify-center"
                     >
-                      <TrashIcon className="w-4 h-4" />
+                      {deletingId === product._id ? (
+                        <ArrowPathIcon className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <TrashIcon className="w-4 h-4" />
+                      )}
                     </button>
                   </div>
                 </div>

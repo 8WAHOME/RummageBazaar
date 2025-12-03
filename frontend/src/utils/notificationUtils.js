@@ -1,4 +1,4 @@
-// src/utils/notifications.js - UPDATED
+// src/utils/notifications.js
 import notificationStore from './notificationStore.js';
 
 class NotificationSystem {
@@ -29,15 +29,15 @@ const notification = new NotificationSystem();
 // Export for React components
 export { notification };
 
-// Export for direct use (optional)
-export const showNotification = (message, type = 'info') => {
-  notification[type](message);
-};
-
-// Export convenience methods
+// Export convenience methods (optional shortcuts)
 export const notifySuccess = (message) => notification.success(message);
 export const notifyError = (message) => notification.error(message);
 export const notifyWarning = (message) => notification.warning(message);
 export const notifyInfo = (message) => notification.info(message);
+
+// For backward compatibility
+export const showNotification = (message, type = 'info') => {
+  notification[type](message);
+};
 
 export default notification;

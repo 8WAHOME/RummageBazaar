@@ -1,6 +1,8 @@
+// src/pages/ProductDetail.jsx - FULLY UPDATED
 import React, { useEffect, useState } from "react";
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { api, parseApiError } from "../utils/api.js";
+import { notification } from "../utils/notifications.js";
 import Loader from "../components/loader.jsx";
 import { 
   FaWhatsapp, 
@@ -41,8 +43,6 @@ export default function ProductDetail() {
       setLoading(true);
       setError(null);
       const data = await api(`/products/${id}`, "GET");
-      
-      console.log("Product detail response:", data);
       
       if (data?.success) {
         setItem(data.product || data);
@@ -142,19 +142,27 @@ export default function ProductDetail() {
 
   async function handleMarkSold() {
     if (!isOwner && !isAdmin) {
-      alert("Only the seller or admin can mark this listing as sold.");
+      notification.error("Only the seller or admin can mark this listing as sold.");
       return;
     }
+    
+    // Use browser confirm for now, but you can replace with your ConfirmModal
     if (!window.confirm("Mark this item as sold? This cannot be undone.")) return;
 
     setBusy(true);
     try {
       const token = await session.getToken();
-      await api(`/products/${id}/sold`, "PATCH", {}, token);
-      await loadProduct();
+      const result = await api(`/products/${id}/sold`, "PATCH", {}, token);
+      
+      if (result?.success) {
+        await loadProduct();
+        notification.success("Product marked as sold successfully!");
+      } else {
+        throw new Error(result?.error || "Failed to mark as sold");
+      }
     } catch (err) {
       console.error(err);
-      alert(err.message || "Failed to mark as sold");
+      notification.error(err.message || "Failed to mark as sold");
     } finally {
       setBusy(false);
     }
@@ -168,13 +176,19 @@ export default function ProductDetail() {
           text: `Check out this ${isDonation ? 'free item' : `item for KSH ${(item.price || 0)?.toLocaleString()}`} on RummageBazaar`,
           url: window.location.href,
         });
+        notification.success("Shared successfully!");
       } catch (err) {
         console.log('Error sharing:', err);
       }
     } else {
       navigator.clipboard.writeText(window.location.href);
-      alert('Product link copied to clipboard!');
+      notification.success('Product link copied to clipboard!');
     }
+  };
+
+  const toggleLike = () => {
+    setIsLiked(!isLiked);
+    notification.success(isLiked ? "Removed from favorites" : "Added to favorites");
   };
 
   const StatusBadge = () => {
@@ -233,7 +247,7 @@ export default function ProductDetail() {
               <FaShare className="w-5 h-5" />
             </button>
             <button
-              onClick={() => setIsLiked(!isLiked)}
+              onClick={toggleLike}
               className="p-3 bg-white rounded-xl shadow-lg hover:shadow-xl transition-all duration-200 hover:scale-105 hover:bg-red-50"
               title={isLiked ? "Remove from favorites" : "Add to favorites"}
             >
