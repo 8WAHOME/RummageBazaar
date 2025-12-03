@@ -1,3 +1,4 @@
+// src/pages/Browse.jsx
 import React, { useEffect, useState } from "react";
 import { api } from "../utils/api.js";
 import { Link, useSearchParams } from "react-router-dom";
@@ -57,6 +58,12 @@ const categoryIcons = {
   'Other': CubeIcon,
 };
 
+// Simple notification helper
+const showNotification = (message, type = 'info') => {
+  console.log(`${type}: ${message}`);
+  // You can implement a proper notification system here
+};
+
 export default function Browse() {
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -65,7 +72,7 @@ export default function Browse() {
   const [category, setCategory] = useState(searchParams.get('category') || "All");
   const [locationFilter, setLocationFilter] = useState(searchParams.get('location') || "");
   const [userLocation, setUserLocation] = useState(null);
-  const [radius, setRadius] = useState(50); // Default 50km radius
+  const [radius, setRadius] = useState(50);
   const [gettingLocation, setGettingLocation] = useState(false);
   const [sortBy, setSortBy] = useState("newest");
 
@@ -74,14 +81,17 @@ export default function Browse() {
     loadProducts();
   }, []);
 
-  // AUTO-REFRESH: Load products when filters change
+  // Load products when filters change
   useEffect(() => {
-    if (!loading) { // Prevent double load on initial render
-      loadProducts();
+    if (!loading) {
+      const timer = setTimeout(() => {
+        loadProducts();
+      }, 300);
+      return () => clearTimeout(timer);
     }
   }, [category, locationFilter, userLocation, radius]);
 
-  // Update URL when filters change (without triggering reload)
+  // Update URL when filters change
   useEffect(() => {
     const params = new URLSearchParams();
     if (q) params.set('search', q);
@@ -121,8 +131,37 @@ export default function Browse() {
         url += `?${params.toString()}`;
       }
 
+      console.log("Fetching from:", url); // Debug
       const res = await api(url, "GET");
-      setProducts(Array.isArray(res) ? res : (res.products || []));
+      console.log("Browse API Response:", res); // Debug
+      
+      // Handle different response formats
+      let productsData = [];
+      if (Array.isArray(res)) {
+        productsData = res;
+      } else if (res && res.products) {
+        productsData = res.products;
+      } else if (res && res.success && res.products) {
+        productsData = res.products;
+      }
+      
+      // Validate and fix product images
+      const validatedProducts = productsData.map(product => ({
+        ...product,
+        images: Array.isArray(product.images) && product.images.length > 0 ? product.images : 
+               product.image ? [product.image] : 
+               ['/api/placeholder/400/300'],
+        price: product.price || 0,
+        title: product.title || 'Untitled Item',
+        location: product.location || 'Location not specified',
+        category: product.category || 'Other',
+        isDonation: product.isDonation || false,
+        status: product.status || 'active',
+        views: product.views || 0,
+        _id: product._id || product.id
+      }));
+      
+      setProducts(validatedProducts);
     } catch (err) {
       console.error("Browse load error:", err);
       setProducts([]);
@@ -190,7 +229,6 @@ export default function Browse() {
 
   const handleCategorySelect = (selectedCategory) => {
     setCategory(selectedCategory);
-    // Auto-refresh will happen via useEffect
   };
 
   const clearFilters = () => {
@@ -214,7 +252,7 @@ export default function Browse() {
         return (b.views || 0) - (a.views || 0);
       case 'newest':
       default:
-        return new Date(b.createdAt) - new Date(a.createdAt);
+        return new Date(b.createdAt || b.createdAt) - new Date(a.createdAt || a.createdAt);
     }
   });
 

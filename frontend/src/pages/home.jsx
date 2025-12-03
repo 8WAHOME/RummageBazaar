@@ -1,3 +1,4 @@
+// src/pages/Home.jsx
 import React, { useEffect, useState } from "react";
 import { api } from "../utils/api";
 import ProductCard from "../components/productCard";
@@ -59,9 +60,33 @@ export default function Home() {
   async function load() {
     try {
       const data = await api("/products");
-      const products = Array.isArray(data) ? data : [];
-      setItems(products);
-      setFeaturedItems(products.slice(0, 8));
+      console.log("Home API Response:", data); // Debug log
+      
+      // Handle different response formats
+      let products = [];
+      if (Array.isArray(data)) {
+        products = data;
+      } else if (data && data.products) {
+        products = data.products;
+      } else if (data && data.success && data.products) {
+        products = data.products;
+      }
+      
+      console.log("Processed products:", products); // Debug log
+      
+      // Validate and fix product images
+      const validatedProducts = products.map(product => ({
+        ...product,
+        images: Array.isArray(product.images) ? product.images : 
+               product.image ? [product.image] : 
+               ['/api/placeholder/400/300'],
+        price: product.price || 0,
+        title: product.title || 'Untitled Item',
+        location: product.location || 'Location not specified'
+      }));
+      
+      setItems(validatedProducts);
+      setFeaturedItems(validatedProducts.slice(0, 8));
     } catch (err) {
       console.error("Home load error", err);
       setItems([]);
@@ -238,7 +263,7 @@ export default function Home() {
             Ready to Find Your Next Treasure?
           </h2>
           <p className="text-xl text-emerald-100 mb-8">
-            Join thousands of buyers and sellers on RummageBazaar
+            Join thousands of Donators Buyers and Sellers on RummageBazaar
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <Link

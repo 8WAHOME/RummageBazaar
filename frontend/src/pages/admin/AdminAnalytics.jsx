@@ -3,7 +3,7 @@ import React, { useEffect, useState } from "react";
 import { useClerk } from "@clerk/clerk-react";
 import { api, parseApiError } from "../../utils/api.js";
 import Loader from "../../components/loader.jsx";
-import Notification from "../../components/notification.jsx";
+import Notification from "../../components/Notification.jsx";
 import {
   ChartBarIcon,
   ShoppingBagIcon,
@@ -20,7 +20,7 @@ import {
   CalendarIcon,
   ArrowUpIcon,
   ArrowDownIcon,
-  // TrendingUpIcon doesn't exist in outline - removed or replaced
+  ArrowPathIcon,
 } from "@heroicons/react/24/outline";
 
 export default function AdminAnalytics() {
@@ -28,16 +28,14 @@ export default function AdminAnalytics() {
   const [loading, setLoading] = useState(true);
   const [analytics, setAnalytics] = useState(null);
   const [error, setError] = useState(null);
-  const [timeRange, setTimeRange] = useState("month"); // day, week, month, year
+  const [timeRange, setTimeRange] = useState("month");
 
-  // Notification state
   const [notification, setNotification] = useState({
     show: false,
     message: "",
     type: "info"
   });
 
-  // Show notification helper
   const showNotification = (message, type = "info") => {
     setNotification({
       show: true,
@@ -45,7 +43,6 @@ export default function AdminAnalytics() {
       type
     });
 
-    // Auto-hide after 3 seconds
     setTimeout(() => {
       setNotification(prev => ({ ...prev, show: false }));
     }, 3000);
@@ -60,6 +57,8 @@ export default function AdminAnalytics() {
     try {
       const token = await session.getToken();
       const data = await api(`/products/analytics/platform?timeRange=${timeRange}`, "GET", null, token);
+      
+      console.log("Analytics response:", data);
       
       if (data?.success) {
         setAnalytics(data);
@@ -78,7 +77,6 @@ export default function AdminAnalytics() {
 
   useEffect(() => {
     loadAnalytics();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id, timeRange]);
 
   const formatCurrency = (amount) => {
@@ -87,11 +85,11 @@ export default function AdminAnalytics() {
       currency: 'KES',
       minimumFractionDigits: 0,
       maximumFractionDigits: 0
-    }).format(amount);
+    }).format(amount || 0);
   };
 
   const formatNumber = (num) => {
-    return new Intl.NumberFormat('en-KE').format(num);
+    return new Intl.NumberFormat('en-KE').format(num || 0);
   };
 
   const getPercentageChange = (current, previous) => {
@@ -137,7 +135,7 @@ export default function AdminAnalytics() {
                   onClick={loadAnalytics}
                   className="px-4 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors flex items-center gap-2"
                 >
-                  <ArrowTrendingUpIcon className="w-5 h-5" />
+                  <ArrowPathIcon className="w-5 h-5" />
                   Refresh
                 </button>
               </div>
@@ -159,12 +157,12 @@ export default function AdminAnalytics() {
                     <div>
                       <p className="text-sm font-medium text-gray-600">Total Users</p>
                       <p className="text-2xl font-bold text-gray-900 mt-1">
-                        {formatNumber(analytics.overview?.totalUsers || 0)}
+                        {formatNumber(analytics.overview?.totalUsers || analytics.totalUsers || 0)}
                       </p>
                       <div className="flex items-center gap-1 mt-2">
                         <ArrowUpIcon className="w-4 h-4 text-green-500" />
                         <span className="text-xs text-green-600">
-                          +{analytics.userStats?.newUsersLast30Days || 0} this month
+                          +{analytics.userStats?.newUsersLast30Days || analytics.newUsersLast30Days || 0} this month
                         </span>
                       </div>
                     </div>
@@ -179,10 +177,10 @@ export default function AdminAnalytics() {
                     <div>
                       <p className="text-sm font-medium text-gray-600">Active Listings</p>
                       <p className="text-2xl font-bold text-emerald-600 mt-1">
-                        {formatNumber(analytics.overview?.activeListings || 0)}
+                        {formatNumber(analytics.overview?.activeListings || analytics.activeListings || 0)}
                       </p>
                       <p className="text-xs text-gray-500 mt-1">
-                        Total: {formatNumber(analytics.overview?.totalListings || 0)}
+                        Total: {formatNumber(analytics.overview?.totalListings || analytics.totalListings || 0)}
                       </p>
                     </div>
                     <div className="w-12 h-12 bg-emerald-100 rounded-xl flex items-center justify-center">
@@ -196,10 +194,10 @@ export default function AdminAnalytics() {
                     <div>
                       <p className="text-sm font-medium text-gray-600">Total Revenue</p>
                       <p className="text-2xl font-bold text-green-600 mt-1">
-                        {formatCurrency(analytics.overview?.totalRevenue || 0)}
+                        {formatCurrency(analytics.overview?.totalRevenue || analytics.totalRevenue || 0)}
                       </p>
                       <p className="text-xs text-gray-500 mt-1">
-                        {formatNumber(analytics.overview?.soldItems || 0)} items sold
+                        {formatNumber(analytics.overview?.soldItems || analytics.soldItems || 0)} items sold
                       </p>
                     </div>
                     <div className="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center">
@@ -213,12 +211,12 @@ export default function AdminAnalytics() {
                     <div>
                       <p className="text-sm font-medium text-gray-600">Avg Price</p>
                       <p className="text-2xl font-bold text-blue-600 mt-1">
-                        {formatCurrency(analytics.overview?.averagePrice || 0)}
+                        {formatCurrency(analytics.overview?.averagePrice || analytics.averagePrice || 0)}
                       </p>
                       <div className="flex items-center gap-1 mt-2">
                         <ArrowTrendingUpIcon className="w-4 h-4 text-blue-500" />
                         <span className="text-xs text-blue-600">
-                          {analytics.performance?.conversionRate || 0}% conversion
+                          {analytics.performance?.conversionRate || analytics.conversionRate || 0}% conversion
                         </span>
                       </div>
                     </div>
@@ -244,28 +242,28 @@ export default function AdminAnalytics() {
                     <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                       <span className="text-gray-700">Regular Users</span>
                       <span className="font-bold text-gray-900">
-                        {formatNumber(analytics.userStats?.regularUsers || 0)}
+                        {formatNumber(analytics.userStats?.regularUsers || analytics.regularUsers || 0)}
                       </span>
                     </div>
                     
                     <div className="flex items-center justify-between p-3 bg-blue-50 rounded-lg">
                       <span className="text-blue-700">Sellers</span>
                       <span className="font-bold text-blue-900">
-                        {formatNumber(analytics.userStats?.sellers || 0)}
+                        {formatNumber(analytics.userStats?.sellers || analytics.sellers || 0)}
                       </span>
                     </div>
                     
                     <div className="flex items-center justify-between p-3 bg-purple-50 rounded-lg">
                       <span className="text-purple-700">Active Sellers</span>
                       <span className="font-bold text-purple-900">
-                        {formatNumber(analytics.userStats?.activeSellers || 0)}
+                        {formatNumber(analytics.userStats?.activeSellers || analytics.activeSellers || 0)}
                       </span>
                     </div>
                     
                     <div className="flex items-center justify-between p-3 bg-emerald-50 rounded-lg">
                       <span className="text-emerald-700">New Users (30 days)</span>
                       <span className="font-bold text-emerald-900">
-                        {formatNumber(analytics.userStats?.newUsersLast30Days || 0)}
+                        {formatNumber(analytics.userStats?.newUsersLast30Days || analytics.newUsersLast30Days || 0)}
                       </span>
                     </div>
                   </div>
@@ -285,28 +283,28 @@ export default function AdminAnalytics() {
                     <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                       <span className="text-gray-700">Conversion Rate</span>
                       <span className="font-bold text-gray-900">
-                        {analytics.performance?.conversionRate || 0}%
+                        {analytics.performance?.conversionRate || analytics.conversionRate || 0}%
                       </span>
                     </div>
                     
                     <div className="flex items-center justify-between p-3 bg-orange-50 rounded-lg">
                       <span className="text-orange-700">Avg Views per Listing</span>
                       <span className="font-bold text-orange-900">
-                        {formatNumber(analytics.performance?.avgViewsPerListing || 0)}
+                        {formatNumber(analytics.performance?.avgViewsPerListing || analytics.avgViewsPerListing || 0)}
                       </span>
                     </div>
                     
                     <div className="flex items-center justify-between p-3 bg-green-50 rounded-lg">
                       <span className="text-green-700">Avg Revenue per Sale</span>
                       <span className="font-bold text-green-900">
-                        {formatCurrency(analytics.performance?.avgRevenuePerSale || 0)}
+                        {formatCurrency(analytics.performance?.avgRevenuePerSale || analytics.avgRevenuePerSale || 0)}
                       </span>
                     </div>
                     
                     <div className="flex items-center justify-between p-3 bg-rose-50 rounded-lg">
                       <span className="text-rose-700">Donation Listings</span>
                       <span className="font-bold text-rose-900">
-                        {formatNumber(analytics.overview?.donationCount || 0)}
+                        {formatNumber(analytics.overview?.donationCount || analytics.donationCount || 0)}
                       </span>
                     </div>
                   </div>
@@ -341,7 +339,7 @@ export default function AdminAnalytics() {
                           <div 
                             className="bg-emerald-600 h-2 rounded-full"
                             style={{
-                              width: `${(cat.count / analytics.overview.totalListings) * 100}%`
+                              width: `${(cat.count / (analytics.overview?.totalListings || analytics.totalListings || 1)) * 100}%`
                             }}
                           />
                         </div>
@@ -427,7 +425,7 @@ export default function AdminAnalytics() {
                     <div>
                       <h3 className="font-bold text-blue-900">Total Views</h3>
                       <p className="text-2xl font-bold text-blue-900 mt-1">
-                        {formatNumber(analytics.overview?.totalViews || 0)}
+                        {formatNumber(analytics.overview?.totalViews || analytics.totalViews || 0)}
                       </p>
                     </div>
                   </div>
@@ -444,7 +442,7 @@ export default function AdminAnalytics() {
                     <div>
                       <h3 className="font-bold text-green-900">Donations</h3>
                       <p className="text-2xl font-bold text-green-900 mt-1">
-                        {formatNumber(analytics.overview?.donationCount || 0)}
+                        {formatNumber(analytics.overview?.donationCount || analytics.donationCount || 0)}
                       </p>
                     </div>
                   </div>
@@ -461,7 +459,7 @@ export default function AdminAnalytics() {
                     <div>
                       <h3 className="font-bold text-purple-900">Platform Health</h3>
                       <p className="text-2xl font-bold text-purple-900 mt-1">
-                        {analytics.performance?.conversionRate || 0}%
+                        {analytics.performance?.conversionRate || analytics.conversionRate || 0}%
                       </p>
                     </div>
                   </div>

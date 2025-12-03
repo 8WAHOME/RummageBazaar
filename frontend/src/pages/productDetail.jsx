@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
-import { api } from "../utils/api.js";
+import { api, parseApiError } from "../utils/api.js";
 import Loader from "../components/loader.jsx";
 import { 
   FaWhatsapp, 
@@ -30,6 +30,7 @@ export default function ProductDetail() {
   const [busy, setBusy] = useState(false);
   const [isLiked, setIsLiked] = useState(false);
   const [imageLoading, setImageLoading] = useState(true);
+  const [error, setError] = useState(null);
 
   useEffect(() => {
     loadProduct();
@@ -38,12 +39,29 @@ export default function ProductDetail() {
   async function loadProduct() {
     try {
       setLoading(true);
+      setError(null);
       const data = await api(`/products/${id}`, "GET");
-      setItem(data);
       
-      // Increment view count (this will be handled by backend now)
+      console.log("Product detail response:", data);
+      
+      if (data?.success) {
+        setItem(data.product || data);
+      } else if (data) {
+        setItem(data);
+      } else {
+        throw new Error("Product not found");
+      }
+      
+      // Track view count
+      try {
+        await api(`/products/${id}/view`, "POST");
+      } catch (viewError) {
+        console.log("View count update failed:", viewError);
+      }
     } catch (err) {
       console.error("Product load error:", err);
+      const parsedError = parseApiError(err);
+      setError(parsedError.message || "Failed to load product");
       setItem(null);
     } finally {
       setLoading(false);
@@ -51,16 +69,14 @@ export default function ProductDetail() {
   }
 
   if (loading) return <Loader />;
-  if (!item) return (
+  if (!item && error) return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-blue-50 flex items-center justify-center">
       <div className="text-center max-w-md mx-4">
         <div className="w-24 h-24 mx-auto mb-6 bg-gradient-to-br from-red-100 to-red-200 rounded-full flex items-center justify-center">
           <FaEye className="w-12 h-12 text-red-500" />
         </div>
         <h1 className="text-3xl font-bold text-gray-900 mb-3">Product Not Found</h1>
-        <p className="text-gray-600 mb-8 text-lg">
-          The product you're looking for doesn't exist or has been removed.
-        </p>
+        <p className="text-gray-600 mb-8 text-lg">{error}</p>
         <div className="flex flex-col sm:flex-row gap-4 justify-center">
           <button 
             onClick={() => navigate(-1)}
@@ -80,18 +96,19 @@ export default function ProductDetail() {
     </div>
   );
 
+  if (!item) return null;
+
   const isDonation = Number(item.price) === 0 || item.isDonation;
   const isSold = item.status === "sold" || item.sold === true;
   const isPending = item.status === "pending";
 
-  // Check if current user can see views
   const isSeller = user?.id === item.userId;
   const isAdmin = user?.publicMetadata?.role === "admin" || user?.publicMetadata?.role === "Admin";
   const showViews = isSeller || isAdmin;
 
   const formatPhoneNumber = (phone, countryCode = "+254") => {
     if (!phone) return "";
-    const cleanPhone = phone.replace(/\D/g, '');
+    const cleanPhone = phone.toString().replace(/\D/g, '');
     if (!cleanPhone) return "";
     
     let formattedNumber = cleanPhone;
@@ -116,7 +133,7 @@ export default function ProductDetail() {
   
   const whatsappHref = formattedPhone
     ? `https://wa.me/${formattedPhone.replace('+', '')}?text=${encodeURIComponent(
-        `Hi! I'm interested in your product: "${item.title}" (${isDonation ? "FREE" : `KSH ${item.price?.toLocaleString()}`}). On RummageBazaar Is it still available?`
+        `Hi! I'm interested in your product: "${item.title}" (${isDonation ? "FREE" : `KSH ${(item.price || 0)?.toLocaleString()}`}). On RummageBazaar Is it still available?`
       )}`
     : null;
 
@@ -134,7 +151,7 @@ export default function ProductDetail() {
     try {
       const token = await session.getToken();
       await api(`/products/${id}/sold`, "PATCH", {}, token);
-      await loadProduct(); // Reload the product data
+      await loadProduct();
     } catch (err) {
       console.error(err);
       alert(err.message || "Failed to mark as sold");
@@ -148,7 +165,7 @@ export default function ProductDetail() {
       try {
         await navigator.share({
           title: item.title,
-          text: `Check out this ${isDonation ? 'free item' : `item for KSH ${item.price?.toLocaleString()}`} on RummageBazaar`,
+          text: `Check out this ${isDonation ? 'free item' : `item for KSH ${(item.price || 0)?.toLocaleString()}`} on RummageBazaar`,
           url: window.location.href,
         });
       } catch (err) {
@@ -264,9 +281,13 @@ export default function ProductDetail() {
                 {item.images?.length ? (
                   <>
                     <img 
-                      src={item.images[mainIndex]} 
+                      src={item.images[mainIndex] || "/api/placeholder/400/300"} 
                       alt={`${item.title} - Image ${mainIndex + 1}`}
                       onLoad={() => setImageLoading(false)}
+                      onError={(e) => {
+                        e.target.src = "/api/placeholder/400/300";
+                        setImageLoading(false);
+                      }}
                       className={`w-full h-full object-cover transition-opacity duration-500 ${
                         imageLoading ? 'opacity-0' : 'opacity-100'
                       }`}
@@ -303,9 +324,10 @@ export default function ProductDetail() {
                     }`}
                   >
                     <img 
-                      src={img} 
+                      src={img || "/api/placeholder/100/100"} 
                       alt={`Thumbnail ${idx + 1}`} 
                       className="w-24 h-24 object-cover"
+                      onError={(e) => e.target.src = "/api/placeholder/100/100"}
                     />
                   </button>
                 ))}
@@ -321,14 +343,14 @@ export default function ProductDetail() {
               <div className="flex flex-col gap-6 mb-8">
                 <div>
                   <h1 className="text-3xl lg:text-4xl font-bold text-gray-900 leading-tight mb-4">
-                    {item.title}
+                    {item.title || "Untitled Item"}
                   </h1>
                   <div className="flex items-center gap-4">
                     <StatusBadge />
-                    {showViews && item.views > 0 && (
+                    {showViews && (item.views || 0) > 0 && (
                       <div className="flex items-center gap-2 text-sm text-gray-500 bg-gray-100 px-3 py-1.5 rounded-full">
                         <FaEye className="w-3 h-3" />
-                        <span className="font-semibold">{item.views} views</span>
+                        <span className="font-semibold">{item.views || 0} views</span>
                         {(isSeller || isAdmin) && (
                           <span className="text-xs bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded">
                             {isSeller ? "Your listing" : "Admin view"}
@@ -345,13 +367,13 @@ export default function ProductDetail() {
                 <div className="flex items-center justify-between">
                   <div>
                     <div className="text-4xl font-extrabold text-emerald-600">
-                      {isDonation ? "FREE" : `Ksh ${Number(item.price).toLocaleString()}`}
+                      {isDonation ? "FREE" : `Ksh ${Number(item.price || 0).toLocaleString()}`}
                     </div>
                     {isDonation ? (
                       <p className="text-emerald-700 font-semibold mt-2 text-lg">This item is being given away for free</p>
                     ) : item.originalPrice && (
                       <div className="text-lg text-gray-500 line-through mt-1">
-                        KSH {Number(item.originalPrice).toLocaleString()}
+                        KSH {Number(item.originalPrice || 0).toLocaleString()}
                       </div>
                     )}
                   </div>
@@ -361,7 +383,7 @@ export default function ProductDetail() {
               {/* Description */}
               <div className="mb-8">
                 <h3 className="text-xl font-semibold text-gray-900 mb-4">Description</h3>
-                <p className="text-gray-700 leading-relaxed text-lg">{item.description}</p>
+                <p className="text-gray-700 leading-relaxed text-lg">{item.description || "No description provided"}</p>
               </div>
 
               {/* Product Metadata */}
@@ -372,7 +394,7 @@ export default function ProductDetail() {
                   </div>
                   <div>
                     <div className="text-sm text-gray-600 font-medium">Category</div>
-                    <div className="font-semibold text-gray-900 capitalize text-lg">{item.category}</div>
+                    <div className="font-semibold text-gray-900 capitalize text-lg">{item.category || "Other"}</div>
                   </div>
                 </div>
 
@@ -382,7 +404,7 @@ export default function ProductDetail() {
                   </div>
                   <div>
                     <div className="text-sm text-gray-600 font-medium">Condition</div>
-                    <div className="font-semibold text-gray-900 capitalize text-lg">{item.condition}</div>
+                    <div className="font-semibold text-gray-900 capitalize text-lg">{item.condition || "Good"}</div>
                   </div>
                 </div>
 
@@ -458,7 +480,7 @@ export default function ProductDetail() {
                     )}
                     {isAdmin && (
                       <button 
-                        onClick={() => navigate(`/create?edit=${item._id}`)} 
+                        onClick={() => navigate(`/create?edit=${item._id || item.id}`)} 
                         className="px-6 py-3 rounded-xl bg-gray-200 hover:bg-gray-300 font-semibold transition-all duration-200 shadow-lg hover:shadow-xl hover:scale-105"
                       >
                         Edit Listing (Admin)

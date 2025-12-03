@@ -13,7 +13,7 @@ export default function ProductCard({ item }) {
   const [imageError, setImageError] = React.useState(false);
   const [userLocation, setUserLocation] = React.useState(null);
 
-  // Calculate distance function - CORRECTLY PLACED
+  // Calculate distance function
   const calculateDistance = (lat1, lon1, lat2, lon2) => {
     const R = 6371; // Earth's radius in km
     const dLat = (lat2 - lat1) * Math.PI / 180;
@@ -62,16 +62,18 @@ export default function ProductCard({ item }) {
   const formattedPhone = formatPhoneForWhatsApp(item?.sellerPhone, storedCountryCode);
   
   const whatsappHref = formattedPhone
-    ? `https://wa.me/${formattedPhone}?text=${encodeURIComponent(`Hi! I'm interested in "${item.title}" listed for ${isDonation ? "FREE" : `KSH ${item.price?.toLocaleString()}`}. Is it still available?`)}`
+    ? `https://wa.me/${formattedPhone}?text=${encodeURIComponent(`Hi! I'm interested in "${item.title || 'this item'}" listed for ${isDonation ? "FREE" : `KSH ${(item.price || 0)?.toLocaleString()}`}. Is it still available?`)}`
     : null;
 
   const handleImageLoad = () => setImageLoaded(true);
-  const handleImageError = () => setImageError(true);
+  const handleImageError = () => {
+    setImageError(true);
+    setImageLoaded(true);
+  };
 
-  // You'll need to set userLocation somewhere - here's a basic example:
+  // Get user's location
   React.useEffect(() => {
-    // Get user's location from browser or from user profile
-    if (navigator.geolocation) {
+    if (navigator.geolocation && item?.coordinates) {
       navigator.geolocation.getCurrentPosition(
         (position) => {
           setUserLocation({
@@ -84,7 +86,29 @@ export default function ProductCard({ item }) {
         }
       );
     }
-  }, []);
+  }, [item?.coordinates]);
+
+  // Calculate distance if both locations are available
+  let distance = null;
+  if (userLocation && item?.coordinates) {
+    // Check if coordinates are in proper format
+    if (item.coordinates.latitude && item.coordinates.longitude) {
+      distance = calculateDistance(
+        userLocation.latitude,
+        userLocation.longitude,
+        item.coordinates.latitude,
+        item.coordinates.longitude
+      ).toFixed(1);
+    } else if (item.coordinates.coordinates && item.coordinates.coordinates.length === 2) {
+      // Handle GeoJSON format [longitude, latitude]
+      distance = calculateDistance(
+        userLocation.latitude,
+        userLocation.longitude,
+        item.coordinates.coordinates[1], // latitude
+        item.coordinates.coordinates[0]  // longitude
+      ).toFixed(1);
+    }
+  }
 
   return (
     <article className="group bg-white rounded-2xl shadow-lg hover:shadow-2xl transition-all duration-500 overflow-hidden border border-gray-100 hover:border-emerald-200 relative">
@@ -100,13 +124,13 @@ export default function ProductCard({ item }) {
 
       {/* Image Section */}
       <div className="relative overflow-hidden">
-        <Link to={`/products/${item._id}`} className="block">
+        <Link to={`/products/${item._id || item.id}`} className="block">
           <div className="relative h-64 w-full bg-gradient-to-br from-gray-100 to-gray-200">
             {!imageError ? (
               <>
                 <img
                   src={item?.images?.[0] || "/api/placeholder/400/400"}
-                  alt={item.title}
+                  alt={item.title || "Product image"}
                   onLoad={handleImageLoad}
                   onError={handleImageError}
                   className={`w-full h-full object-cover transition-transform duration-700 group-hover:scale-110 ${
@@ -159,10 +183,10 @@ export default function ProductCard({ item }) {
         </div>
 
         {/* Views Counter */}
-        {showViews && item.views > 0 && (
+        {showViews && (item.views || 0) > 0 && (
           <div className="absolute left-3 bottom-3 flex items-center gap-1.5 bg-black/80 text-white text-xs px-3 py-1.5 rounded-full backdrop-blur-sm">
             <FaEye className="text-xs" />
-            <span className="font-semibold">{item.views} views</span>
+            <span className="font-semibold">{item.views || 0} views</span>
           </div>
         )}
       </div>
@@ -172,36 +196,29 @@ export default function ProductCard({ item }) {
         {/* Category & Location */}
         <div className="flex items-center justify-between mb-3">
           <span className="text-xs font-bold text-emerald-600 bg-emerald-50 px-3 py-1.5 rounded-full border border-emerald-200">
-            {item.category}
+            {item.category || "Other"}
           </span>
           <div className="flex flex-col items-end gap-1">
             {item.location && (
               <div className="flex items-center gap-1 text-xs text-gray-500 font-medium">
                 <MdLocationOn className="text-xs" />
-                <span>{item.location.split(',')[0]}</span>
+                <span>{item.location.split(',')[0] || item.location}</span>
               </div>
             )}
-            {/* Distance display - CORRECTLY PLACED */}
-            {userLocation && item.coordinates && (
+            {/* Distance display */}
+            {distance && (
               <div className="flex items-center gap-1 text-xs text-blue-600 font-medium">
                 <MdLocationOn className="w-3 h-3" />
-                <span>
-                  {calculateDistance(
-                    userLocation.latitude,
-                    userLocation.longitude,
-                    item.coordinates.latitude,
-                    item.coordinates.longitude
-                  ).toFixed(1)}km away
-                </span>
+                <span>{distance}km away</span>
               </div>
             )}
           </div>
         </div>
 
         {/* Title */}
-        <Link to={`/products/${item._id}`}>
+        <Link to={`/products/${item._id || item.id}`}>
           <h3 className="font-bold text-gray-900 mb-2 line-clamp-2 group-hover:text-emerald-700 transition-colors duration-300 leading-tight text-lg">
-            {item.title}
+            {item.title || "Untitled Item"}
           </h3>
         </Link>
 
@@ -225,14 +242,14 @@ export default function ProductCard({ item }) {
             </div>
             {!isDonation && item.originalPrice && (
               <div className="text-sm text-gray-500 line-through font-medium">
-                KSH {Number(item.originalPrice).toLocaleString()}
+                KSH {Number(item.originalPrice || 0).toLocaleString()}
               </div>
             )}
           </div>
 
           <div className="flex items-center gap-2">
             <Link 
-              to={`/products/${item._id}`}
+              to={`/products/${item._id || item.id}`}
               className="px-4 py-2.5 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-xl font-semibold hover:from-blue-600 hover:to-blue-700 transition-all duration-300 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 flex items-center gap-2 text-sm"
             >
               <FaEye className="text-sm" />
