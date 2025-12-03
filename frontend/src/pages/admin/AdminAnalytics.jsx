@@ -1,45 +1,76 @@
-import React, { useState, useEffect } from 'react';
-import { useClerk } from '@clerk/clerk-react';
-import { api, parseApiError } from '../../utils/api';
-import Loader from '../../components/loader';
+// src/pages/admin/AdminAnalytics.jsx
+import React, { useEffect, useState } from "react";
+import { useClerk } from "@clerk/clerk-react";
+import { api, parseApiError } from "../../utils/api.js";
+import Loader from "../../components/loader.jsx";
+import Notification from "../../components/notification.jsx";
 import {
   ChartBarIcon,
-  UsersIcon,
   ShoppingBagIcon,
   CurrencyDollarIcon,
   EyeIcon,
-  GiftIcon,
-  TrendingUpIcon,
+  UserGroupIcon,
   ArrowTrendingUpIcon,
   ChartPieIcon,
+  UsersIcon,
+  TagIcon,
+  BanknotesIcon,
+  GlobeAltIcon,
+  GiftIcon,
   CalendarIcon,
-} from '@heroicons/react/24/outline';
+  ArrowUpIcon,
+  ArrowDownIcon,
+  // TrendingUpIcon doesn't exist in outline - removed or replaced
+} from "@heroicons/react/24/outline";
 
 export default function AdminAnalytics() {
-  const { session } = useClerk();
-  const [analytics, setAnalytics] = useState(null);
+  const { user, session } = useClerk();
   const [loading, setLoading] = useState(true);
-  const [timeRange, setTimeRange] = useState('30days'); // 30days, 90days, 6months, alltime
+  const [analytics, setAnalytics] = useState(null);
   const [error, setError] = useState(null);
+  const [timeRange, setTimeRange] = useState("month"); // day, week, month, year
+
+  // Notification state
+  const [notification, setNotification] = useState({
+    show: false,
+    message: "",
+    type: "info"
+  });
+
+  // Show notification helper
+  const showNotification = (message, type = "info") => {
+    setNotification({
+      show: true,
+      message,
+      type
+    });
+
+    // Auto-hide after 3 seconds
+    setTimeout(() => {
+      setNotification(prev => ({ ...prev, show: false }));
+    }, 3000);
+  };
 
   const loadAnalytics = async () => {
+    if (!user?.id) return;
+
+    setLoading(true);
+    setError(null);
+
     try {
-      setLoading(true);
-      setError(null);
-      
       const token = await session.getToken();
-      const response = await api('/products/admin/analytics', 'GET', null, token);
+      const data = await api(`/products/analytics/platform?timeRange=${timeRange}`, "GET", null, token);
       
-      if (response?.success) {
-        setAnalytics(response);
+      if (data?.success) {
+        setAnalytics(data);
       } else {
-        throw new Error(response?.error || 'Failed to load analytics');
+        throw new Error(data?.error || 'Failed to load analytics');
       }
-    } catch (error) {
-      console.error('Failed to load analytics:', error);
-      const parsedError = parseApiError(error);
+    } catch (err) {
+      console.error("Analytics load error:", err);
+      const parsedError = parseApiError(err);
       setError(parsedError.message);
-      showNotification('Failed to load analytics: ' + parsedError.message, 'error');
+      showNotification("Failed to load analytics: " + parsedError.message, "error");
     } finally {
       setLoading(false);
     }
@@ -47,305 +78,427 @@ export default function AdminAnalytics() {
 
   useEffect(() => {
     loadAnalytics();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id, timeRange]);
 
-  // Format currency
   const formatCurrency = (amount) => {
     return new Intl.NumberFormat('en-KE', {
       style: 'currency',
       currency: 'KES',
       minimumFractionDigits: 0,
+      maximumFractionDigits: 0
     }).format(amount);
   };
 
-  // Format percentage
-  const formatPercentage = (value) => {
-    return `${value}%`;
+  const formatNumber = (num) => {
+    return new Intl.NumberFormat('en-KE').format(num);
   };
 
-  // Format large numbers
-  const formatNumber = (num) => {
-    if (num >= 1000000) {
-      return (num / 1000000).toFixed(1) + 'M';
-    }
-    if (num >= 1000) {
-      return (num / 1000).toFixed(1) + 'K';
-    }
-    return num.toString();
+  const getPercentageChange = (current, previous) => {
+    if (!previous || previous === 0) return 100;
+    return Math.round(((current - previous) / previous) * 100);
   };
 
   if (loading) return <Loader />;
 
-  if (error) {
-    return (
-      <div className="min-h-screen bg-gray-50 py-8">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center py-12">
-            <div className="w-24 h-24 mx-auto mb-6 rounded-full bg-red-100 flex items-center justify-center">
-              <ChartBarIcon className="w-12 h-12 text-red-600" />
-            </div>
-            <h3 className="text-xl font-semibold text-gray-800 mb-2">Failed to load analytics</h3>
-            <p className="text-gray-600 mb-6">{error}</p>
-            <button
-              onClick={loadAnalytics}
-              className="bg-emerald-600 text-white px-6 py-3 rounded-xl font-semibold hover:bg-emerald-700 transition-colors"
-            >
-              Retry
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  if (!analytics) {
-    return (
-      <div className="min-h-screen bg-gray-50 py-8">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center py-12">
-            <div className="w-24 h-24 mx-auto mb-6 rounded-full bg-gray-100 flex items-center justify-center">
-              <ChartBarIcon className="w-12 h-12 text-gray-400" />
-            </div>
-            <h3 className="text-xl font-semibold text-gray-800 mb-2">No analytics data available</h3>
-            <p className="text-gray-600 mb-6">Start by creating listings to see analytics</p>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
   return (
-    <div className="min-h-screen bg-gray-50 py-8">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        {/* Header */}
-        <div className="mb-8">
-          <div className="flex flex-col md:flex-row md:items-center md:justify-between">
-            <div>
-              <div className="flex items-center gap-3 mb-2">
-                <ChartBarIcon className="w-8 h-8 text-green-600" />
-                <h1 className="text-3xl font-bold text-gray-900">Platform Analytics</h1>
-              </div>
-              <p className="text-gray-600">Overview of platform performance and metrics</p>
-            </div>
-            
-            <div className="mt-4 md:mt-0">
-              <select
-                value={timeRange}
-                onChange={(e) => setTimeRange(e.target.value)}
-                className="border border-gray-300 rounded-xl px-4 py-2 text-sm focus:ring-2 focus:ring-green-500 focus:border-transparent"
-              >
-                <option value="30days">Last 30 Days</option>
-                <option value="90days">Last 90 Days</option>
-                <option value="6months">Last 6 Months</option>
-                <option value="alltime">All Time</option>
-              </select>
-            </div>
-          </div>
-        </div>
-
-        {/* Overview Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-          <div className="bg-white rounded-2xl p-6 shadow-lg border border-gray-100">
-            <div className="flex items-center justify-between">
+    <>
+      <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 py-8">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          
+          {/* Header */}
+          <div className="mb-8">
+            <div className="flex flex-col md:flex-row md:items-center md:justify-between">
               <div>
-                <p className="text-sm font-medium text-gray-600">Total Users</p>
-                <p className="text-2xl font-bold text-gray-900 mt-1">{formatNumber(analytics.overview.totalUsers)}</p>
-                <div className="flex items-center gap-1 mt-1">
-                  <ArrowTrendingUpIcon className="w-4 h-4 text-green-500" />
-                  <span className="text-xs text-green-600 font-medium">
-                    +{analytics.userStats.newUsersLast30Days} this month
-                  </span>
-                </div>
+                <h1 className="text-3xl md:text-4xl font-bold text-gray-900">
+                  Platform Analytics
+                </h1>
+                <p className="text-gray-600 mt-2">
+                  Comprehensive insights and metrics for your marketplace
+                </p>
               </div>
-              <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center">
-                <UsersIcon className="w-6 h-6 text-blue-600" />
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white rounded-2xl p-6 shadow-lg border border-gray-100">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-600">Total Listings</p>
-                <p className="text-2xl font-bold text-gray-900 mt-1">{formatNumber(analytics.overview.totalListings)}</p>
-                <p className="text-xs text-gray-500 mt-1">{analytics.overview.activeListings} active</p>
-              </div>
-              <div className="w-12 h-12 bg-emerald-100 rounded-xl flex items-center justify-center">
-                <ShoppingBagIcon className="w-6 h-6 text-emerald-600" />
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white rounded-2xl p-6 shadow-lg border border-gray-100">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-600">Total Revenue</p>
-                <p className="text-2xl font-bold text-purple-600 mt-1">{formatCurrency(analytics.overview.totalRevenue)}</p>
-                <p className="text-xs text-gray-500 mt-1">{analytics.overview.soldItems} items sold</p>
-              </div>
-              <div className="w-12 h-12 bg-purple-100 rounded-xl flex items-center justify-center">
-                <CurrencyDollarIcon className="w-6 h-6 text-purple-600" />
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white rounded-2xl p-6 shadow-lg border border-gray-100">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-600">Total Views</p>
-                <p className="text-2xl font-bold text-orange-600 mt-1">{formatNumber(analytics.overview.totalViews)}</p>
-                <p className="text-xs text-gray-500 mt-1">Avg: {analytics.performance.avgViewsPerListing} per listing</p>
-              </div>
-              <div className="w-12 h-12 bg-orange-100 rounded-xl flex items-center justify-center">
-                <EyeIcon className="w-6 h-6 text-orange-600" />
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Performance Metrics */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
-          <div className="bg-white rounded-2xl p-6 shadow-lg border border-gray-100">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
-              <TrendingUpIcon className="w-5 h-5 text-blue-600" />
-              Performance Metrics
-            </h3>
-            <div className="space-y-4">
-              <div className="flex justify-between items-center">
-                <span className="text-gray-600">Conversion Rate</span>
-                <span className="font-semibold text-green-600">
-                  {formatPercentage(analytics.performance.conversionRate)}
-                </span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-gray-600">Average Price</span>
-                <span className="font-semibold text-purple-600">
-                  {formatCurrency(analytics.overview.averagePrice)}
-                </span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-gray-600">Revenue per Sale</span>
-                <span className="font-semibold text-emerald-600">
-                  {formatCurrency(analytics.performance.avgRevenuePerSale)}
-                </span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-gray-600">Donations</span>
-                <span className="font-semibold text-rose-600">{analytics.overview.donationCount}</span>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white rounded-2xl p-6 shadow-lg border border-gray-100">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
-              <UsersIcon className="w-5 h-5 text-blue-600" />
-              User Statistics
-            </h3>
-            <div className="space-y-4">
-              <div className="flex justify-between items-center">
-                <span className="text-gray-600">Regular Users</span>
-                <span className="font-semibold text-blue-600">{analytics.userStats.regularUsers}</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-gray-600">Sellers</span>
-                <span className="font-semibold text-purple-600">{analytics.userStats.sellers}</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-gray-600">Admins</span>
-                <span className="font-semibold text-green-600">{analytics.userStats.admins}</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-gray-600">Active Sellers</span>
-                <span className="font-semibold text-emerald-600">{analytics.userStats.activeSellers}</span>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white rounded-2xl p-6 shadow-lg border border-gray-100">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
-              <ChartPieIcon className="w-5 h-5 text-purple-600" />
-              Top Categories
-            </h3>
-            <div className="space-y-3">
-              {analytics.categoryStats.topCategories.map((cat, index) => (
-                <div key={cat.category} className="flex justify-between items-center">
-                  <div className="flex items-center gap-2">
-                    <div className={`w-3 h-3 rounded-full ${
-                      index === 0 ? 'bg-emerald-500' :
-                      index === 1 ? 'bg-blue-500' :
-                      index === 2 ? 'bg-purple-500' :
-                      index === 3 ? 'bg-orange-500' :
-                      'bg-gray-500'
-                    }`}></div>
-                    <span className="text-gray-600 truncate max-w-[120px]">{cat.category}</span>
-                  </div>
-                  <span className="font-semibold text-gray-900">{cat.count} listings</span>
-                </div>
-              ))}
-            </div>
-            <div className="mt-4 pt-4 border-t border-gray-100">
-              <p className="text-sm text-gray-500">
-                Total Categories: {analytics.categoryStats.totalCategories}
-              </p>
-            </div>
-          </div>
-        </div>
-
-        {/* Monthly Growth Chart */}
-        <div className="bg-white rounded-2xl p-6 shadow-lg border border-gray-100 mb-8">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
-            <CalendarIcon className="w-5 h-5 text-emerald-600" />
-            Monthly Growth (Last 6 Months)
-          </h3>
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b border-gray-200">
-                  <th className="text-left py-3 px-4 text-sm font-medium text-gray-600">Month</th>
-                  <th className="text-left py-3 px-4 text-sm font-medium text-gray-600">Listings</th>
-                  <th className="text-left py-3 px-4 text-sm font-medium text-gray-600">Sold</th>
-                  <th className="text-left py-3 px-4 text-sm font-medium text-gray-600">Revenue</th>
-                </tr>
-              </thead>
-              <tbody>
-                {analytics.monthlyGrowth.map((month, index) => (
-                  <tr key={index} className="border-b border-gray-100 hover:bg-gray-50">
-                    <td className="py-3 px-4">
-                      <div className="font-medium text-gray-900">{month.month} {month.year}</div>
-                    </td>
-                    <td className="py-3 px-4">
-                      <div className="flex items-center gap-2">
-                        <div className="w-16 bg-gray-200 rounded-full h-2">
-                          <div 
-                            className="bg-emerald-500 h-2 rounded-full" 
-                            style={{ 
-                              width: `${(month.listings / Math.max(...analytics.monthlyGrowth.map(m => m.listings))) * 100}%` 
-                            }}
-                          ></div>
-                        </div>
-                        <span className="text-gray-700">{month.listings}</span>
-                      </div>
-                    </td>
-                    <td className="py-3 px-4">
-                      <div className="text-gray-700">{month.sold}</div>
-                    </td>
-                    <td className="py-3 px-4">
-                      <div className="font-semibold text-purple-600">
-                        {formatCurrency(month.revenue)}
-                      </div>
-                    </td>
-                  </tr>
+              
+              {/* Time Range Selector */}
+              <div className="flex gap-2 mt-4 md:mt-0">
+                {["day", "week", "month", "year"].map((range) => (
+                  <button
+                    key={range}
+                    onClick={() => setTimeRange(range)}
+                    className={`px-4 py-2 rounded-lg font-medium capitalize transition-colors ${
+                      timeRange === range
+                        ? "bg-emerald-600 text-white"
+                        : "bg-white text-gray-700 border border-gray-300 hover:bg-gray-50"
+                    }`}
+                  >
+                    {range}
+                  </button>
                 ))}
-              </tbody>
-            </table>
+                <button
+                  onClick={loadAnalytics}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors flex items-center gap-2"
+                >
+                  <ArrowTrendingUpIcon className="w-5 h-5" />
+                  Refresh
+                </button>
+              </div>
+            </div>
           </div>
-        </div>
 
-        {/* Last Updated */}
-        <div className="text-center text-sm text-gray-500">
-          Last updated: {new Date(analytics.timestamp).toLocaleString()}
+          {error && (
+            <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-xl text-red-700">
+              {error}
+            </div>
+          )}
+
+          {analytics ? (
+            <>
+              {/* Overview Cards */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+                <div className="bg-white rounded-2xl p-6 shadow-lg border border-gray-100">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-gray-600">Total Users</p>
+                      <p className="text-2xl font-bold text-gray-900 mt-1">
+                        {formatNumber(analytics.overview?.totalUsers || 0)}
+                      </p>
+                      <div className="flex items-center gap-1 mt-2">
+                        <ArrowUpIcon className="w-4 h-4 text-green-500" />
+                        <span className="text-xs text-green-600">
+                          +{analytics.userStats?.newUsersLast30Days || 0} this month
+                        </span>
+                      </div>
+                    </div>
+                    <div className="w-12 h-12 bg-purple-100 rounded-xl flex items-center justify-center">
+                      <UsersIcon className="w-6 h-6 text-purple-600" />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-white rounded-2xl p-6 shadow-lg border border-gray-100">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-gray-600">Active Listings</p>
+                      <p className="text-2xl font-bold text-emerald-600 mt-1">
+                        {formatNumber(analytics.overview?.activeListings || 0)}
+                      </p>
+                      <p className="text-xs text-gray-500 mt-1">
+                        Total: {formatNumber(analytics.overview?.totalListings || 0)}
+                      </p>
+                    </div>
+                    <div className="w-12 h-12 bg-emerald-100 rounded-xl flex items-center justify-center">
+                      <ShoppingBagIcon className="w-6 h-6 text-emerald-600" />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-white rounded-2xl p-6 shadow-lg border border-gray-100">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-gray-600">Total Revenue</p>
+                      <p className="text-2xl font-bold text-green-600 mt-1">
+                        {formatCurrency(analytics.overview?.totalRevenue || 0)}
+                      </p>
+                      <p className="text-xs text-gray-500 mt-1">
+                        {formatNumber(analytics.overview?.soldItems || 0)} items sold
+                      </p>
+                    </div>
+                    <div className="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center">
+                      <BanknotesIcon className="w-6 h-6 text-green-600" />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-white rounded-2xl p-6 shadow-lg border border-gray-100">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-gray-600">Avg Price</p>
+                      <p className="text-2xl font-bold text-blue-600 mt-1">
+                        {formatCurrency(analytics.overview?.averagePrice || 0)}
+                      </p>
+                      <div className="flex items-center gap-1 mt-2">
+                        <ArrowTrendingUpIcon className="w-4 h-4 text-blue-500" />
+                        <span className="text-xs text-blue-600">
+                          {analytics.performance?.conversionRate || 0}% conversion
+                        </span>
+                      </div>
+                    </div>
+                    <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center">
+                      <ChartPieIcon className="w-6 h-6 text-blue-600" />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* User Statistics */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+                <div className="bg-white rounded-2xl p-6 shadow-lg border border-gray-100">
+                  <div className="flex items-center justify-between mb-6">
+                    <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2">
+                      <UserGroupIcon className="w-5 h-5" />
+                      User Statistics
+                    </h2>
+                    <UsersIcon className="w-5 h-5 text-gray-400" />
+                  </div>
+                  
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                      <span className="text-gray-700">Regular Users</span>
+                      <span className="font-bold text-gray-900">
+                        {formatNumber(analytics.userStats?.regularUsers || 0)}
+                      </span>
+                    </div>
+                    
+                    <div className="flex items-center justify-between p-3 bg-blue-50 rounded-lg">
+                      <span className="text-blue-700">Sellers</span>
+                      <span className="font-bold text-blue-900">
+                        {formatNumber(analytics.userStats?.sellers || 0)}
+                      </span>
+                    </div>
+                    
+                    <div className="flex items-center justify-between p-3 bg-purple-50 rounded-lg">
+                      <span className="text-purple-700">Active Sellers</span>
+                      <span className="font-bold text-purple-900">
+                        {formatNumber(analytics.userStats?.activeSellers || 0)}
+                      </span>
+                    </div>
+                    
+                    <div className="flex items-center justify-between p-3 bg-emerald-50 rounded-lg">
+                      <span className="text-emerald-700">New Users (30 days)</span>
+                      <span className="font-bold text-emerald-900">
+                        {formatNumber(analytics.userStats?.newUsersLast30Days || 0)}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Performance Metrics */}
+                <div className="bg-white rounded-2xl p-6 shadow-lg border border-gray-100">
+                  <div className="flex items-center justify-between mb-6">
+                    <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2">
+                      <ChartBarIcon className="w-5 h-5" />
+                      Performance Metrics
+                    </h2>
+                    <ArrowTrendingUpIcon className="w-5 h-5 text-gray-400" />
+                  </div>
+                  
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                      <span className="text-gray-700">Conversion Rate</span>
+                      <span className="font-bold text-gray-900">
+                        {analytics.performance?.conversionRate || 0}%
+                      </span>
+                    </div>
+                    
+                    <div className="flex items-center justify-between p-3 bg-orange-50 rounded-lg">
+                      <span className="text-orange-700">Avg Views per Listing</span>
+                      <span className="font-bold text-orange-900">
+                        {formatNumber(analytics.performance?.avgViewsPerListing || 0)}
+                      </span>
+                    </div>
+                    
+                    <div className="flex items-center justify-between p-3 bg-green-50 rounded-lg">
+                      <span className="text-green-700">Avg Revenue per Sale</span>
+                      <span className="font-bold text-green-900">
+                        {formatCurrency(analytics.performance?.avgRevenuePerSale || 0)}
+                      </span>
+                    </div>
+                    
+                    <div className="flex items-center justify-between p-3 bg-rose-50 rounded-lg">
+                      <span className="text-rose-700">Donation Listings</span>
+                      <span className="font-bold text-rose-900">
+                        {formatNumber(analytics.overview?.donationCount || 0)}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Category Distribution */}
+              {analytics.categoryStats?.topCategories && analytics.categoryStats.topCategories.length > 0 && (
+                <div className="bg-white rounded-2xl p-6 shadow-lg border border-gray-100 mb-8">
+                  <div className="flex items-center justify-between mb-6">
+                    <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2">
+                      <TagIcon className="w-5 h-5" />
+                      Top Categories
+                    </h2>
+                    <span className="text-sm text-gray-500">
+                      {analytics.categoryStats.totalCategories || 0} categories total
+                    </span>
+                  </div>
+                  
+                  <div className="space-y-4">
+                    {analytics.categoryStats.topCategories.map((cat, index) => (
+                      <div key={cat.category} className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="font-medium text-gray-700">
+                            {index + 1}. {cat.category}
+                          </span>
+                          <span className="font-bold text-gray-900">
+                            {formatNumber(cat.count)} listings
+                          </span>
+                        </div>
+                        <div className="w-full bg-gray-200 rounded-full h-2">
+                          <div 
+                            className="bg-emerald-600 h-2 rounded-full"
+                            style={{
+                              width: `${(cat.count / analytics.overview.totalListings) * 100}%`
+                            }}
+                          />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Monthly Growth */}
+              {analytics.monthlyGrowth && analytics.monthlyGrowth.length > 0 && (
+                <div className="bg-white rounded-2xl p-6 shadow-lg border border-gray-100">
+                  <h2 className="text-xl font-bold text-gray-900 mb-6 flex items-center gap-2">
+                    <CalendarIcon className="w-5 h-5" />
+                    Monthly Performance
+                  </h2>
+                  
+                  <div className="overflow-x-auto">
+                    <table className="w-full">
+                      <thead>
+                        <tr className="border-b border-gray-200">
+                          <th className="text-left py-3 px-4 text-gray-600 font-medium">Month</th>
+                          <th className="text-left py-3 px-4 text-gray-600 font-medium">Listings</th>
+                          <th className="text-left py-3 px-4 text-gray-600 font-medium">Sold</th>
+                          <th className="text-left py-3 px-4 text-gray-600 font-medium">Revenue</th>
+                          <th className="text-left py-3 px-4 text-gray-600 font-medium">Growth</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {analytics.monthlyGrowth.map((month, index) => {
+                          const prevMonth = analytics.monthlyGrowth[index - 1];
+                          const growth = prevMonth ? getPercentageChange(month.listings, prevMonth.listings) : 100;
+                          
+                          return (
+                            <tr key={`${month.month}-${month.year}`} className="border-b border-gray-100 hover:bg-gray-50">
+                              <td className="py-3 px-4 font-medium">
+                                {month.month} {month.year}
+                              </td>
+                              <td className="py-3 px-4">
+                                {formatNumber(month.listings)}
+                              </td>
+                              <td className="py-3 px-4">
+                                {formatNumber(month.sold)}
+                              </td>
+                              <td className="py-3 px-4 font-medium text-green-600">
+                                {formatCurrency(month.revenue)}
+                              </td>
+                              <td className="py-3 px-4">
+                                <div className="flex items-center gap-1">
+                                  {growth >= 0 ? (
+                                    <>
+                                      <ArrowUpIcon className="w-4 h-4 text-green-500" />
+                                      <span className="text-green-600 font-medium">
+                                        +{growth}%
+                                      </span>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <ArrowDownIcon className="w-4 h-4 text-red-500" />
+                                      <span className="text-red-600 font-medium">
+                                        {growth}%
+                                      </span>
+                                    </>
+                                  )}
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {/* Summary Stats */}
+              <div className="mt-8 grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-2xl p-6 border border-blue-200">
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center">
+                      <EyeIcon className="w-5 h-5 text-blue-600" />
+                    </div>
+                    <div>
+                      <h3 className="font-bold text-blue-900">Total Views</h3>
+                      <p className="text-2xl font-bold text-blue-900 mt-1">
+                        {formatNumber(analytics.overview?.totalViews || 0)}
+                      </p>
+                    </div>
+                  </div>
+                  <p className="text-blue-700 text-sm">
+                    Combined views across all listings
+                  </p>
+                </div>
+
+                <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-2xl p-6 border border-green-200">
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center">
+                      <GiftIcon className="w-5 h-5 text-green-600" />
+                    </div>
+                    <div>
+                      <h3 className="font-bold text-green-900">Donations</h3>
+                      <p className="text-2xl font-bold text-green-900 mt-1">
+                        {formatNumber(analytics.overview?.donationCount || 0)}
+                      </p>
+                    </div>
+                  </div>
+                  <p className="text-green-700 text-sm">
+                    Free items helping the community
+                  </p>
+                </div>
+
+                <div className="bg-gradient-to-br from-purple-50 to-purple-100 rounded-2xl p-6 border border-purple-200">
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center">
+                      <GlobeAltIcon className="w-5 h-5 text-purple-600" />
+                    </div>
+                    <div>
+                      <h3 className="font-bold text-purple-900">Platform Health</h3>
+                      <p className="text-2xl font-bold text-purple-900 mt-1">
+                        {analytics.performance?.conversionRate || 0}%
+                      </p>
+                    </div>
+                  </div>
+                  <p className="text-purple-700 text-sm">
+                    Overall conversion rate
+                  </p>
+                </div>
+              </div>
+            </>
+          ) : (
+            <div className="bg-white rounded-2xl shadow-lg p-12 text-center">
+              <div className="w-24 h-24 mx-auto mb-6 rounded-full bg-gray-100 flex items-center justify-center">
+                <ChartBarIcon className="w-10 h-10 text-gray-400" />
+              </div>
+              <h3 className="text-xl font-semibold text-gray-800 mb-2">No analytics data</h3>
+              <p className="text-gray-600 mb-6">
+                {error ? "Failed to load analytics" : "Analytics data is not available yet"}
+              </p>
+              <button
+                onClick={loadAnalytics}
+                className="bg-emerald-600 text-white px-8 py-3 rounded-xl font-semibold hover:bg-emerald-700 transition-colors inline-flex items-center gap-2"
+              >
+                <ArrowTrendingUpIcon className="w-5 h-5" />
+                Try Again
+              </button>
+            </div>
+          )}
         </div>
       </div>
-    </div>
+
+      {/* Notification */}
+      <Notification
+        show={notification.show}
+        message={notification.message}
+        type={notification.type}
+        onClose={() => setNotification(prev => ({ ...prev, show: false }))}
+      />
+    </>
   );
 }
