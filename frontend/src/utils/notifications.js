@@ -1,3 +1,4 @@
+// src/utils/notifications.js
 // Custom notification system
 class NotificationSystem {
   constructor() {
@@ -82,11 +83,12 @@ window.showNotification = (message, type = 'info') => {
   notification[type](message);
 };
 
-// Custom confirm dialog
+// Custom confirm dialog - FIXED to properly handle async/await
 window.customConfirm = (message, title = 'Confirm Action') => {
   return new Promise((resolve) => {
     const overlay = document.createElement('div');
     overlay.className = 'fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4';
+    overlay.style.zIndex = '9999';
     
     const dialog = document.createElement('div');
     dialog.className = 'bg-white rounded-2xl shadow-2xl p-6 max-w-sm w-full mx-auto animate-in zoom-in-95';
@@ -113,11 +115,16 @@ window.customConfirm = (message, title = 'Confirm Action') => {
     overlay.appendChild(dialog);
     document.body.appendChild(overlay);
 
+    // Prevent scrolling when modal is open
+    document.body.style.overflow = 'hidden';
+
     const confirmBtn = dialog.querySelector('#confirm-btn');
     const cancelBtn = dialog.querySelector('#cancel-btn');
 
     const cleanup = () => {
       overlay.style.opacity = '0';
+      overlay.style.transform = 'scale(0.95)';
+      document.body.style.overflow = ''; // Restore scrolling
       setTimeout(() => {
         if (overlay.parentElement) {
           overlay.remove();
@@ -125,27 +132,44 @@ window.customConfirm = (message, title = 'Confirm Action') => {
       }, 300);
     };
 
-    confirmBtn.onclick = () => {
+    const handleConfirm = () => {
       cleanup();
-      resolve(true);
+      setTimeout(() => resolve(true), 50);
     };
 
-    cancelBtn.onclick = () => {
+    const handleCancel = () => {
       cleanup();
-      resolve(false);
+      setTimeout(() => resolve(false), 50);
     };
+
+    confirmBtn.onclick = handleConfirm;
+    cancelBtn.onclick = handleCancel;
 
     // Close on overlay click
     overlay.onclick = (e) => {
       if (e.target === overlay) {
-        cleanup();
-        resolve(false);
+        handleCancel();
       }
     };
+
+    // Close on Escape key
+    const handleEscape = (e) => {
+      if (e.key === 'Escape') {
+        handleCancel();
+        document.removeEventListener('keydown', handleEscape);
+      }
+    };
+    
+    document.addEventListener('keydown', handleEscape);
+    
+    // Cleanup event listener when done
+    overlay.addEventListener('animationend', () => {
+      document.removeEventListener('keydown', handleEscape);
+    });
   });
 };
 
-// Replace native confirm
+// Replace native confirm with our custom one
 window.confirm = (message) => customConfirm(message, 'Please Confirm');
 
 export default notification;

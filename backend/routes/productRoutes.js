@@ -1,6 +1,7 @@
 // backend/routes/productRoutes.js
 import express from "express";
 import { requireAuth } from "@clerk/express";
+import { getPlatformAnalytics } from "../controllers/productController.js";
 import {
   createProduct,
   getProducts,
@@ -11,6 +12,8 @@ import {
   updateProduct,
   incrementViewCount,
   getAllProductsAdmin,
+  viewCountLimiter, 
+  createProductLimiter,
   deleteProductAdmin,
   getProductsByLocation
 } from "../controllers/productController.js";
@@ -23,6 +26,10 @@ router.get("/location", getProductsByLocation); // New location-based endpoint
 router.get("/:id", getProductById);
 router.post("/:id/view", incrementViewCount);
 
+// Apply rate limiters to specific routes
+router.post('/products', createProductLimiter, createProduct);
+router.post('/products/:id/view', viewCountLimiter, incrementViewCount);
+
 // Protected routes
 router.post("/", requireAuth(), createProduct);
 router.patch("/:id/sold", requireAuth(), markProductAsSold);
@@ -33,5 +40,6 @@ router.get("/analytics/seller/:userId", requireAuth(), getSellerAnalytics);
 router.get("/admin/all", requireAuth(), getAllProductsAdmin);
 router.put("/:id", requireAuth(), updateProduct);
 router.delete("/admin/:id", requireAuth(), deleteProductAdmin);
+router.get("/admin/analytics", requireAuth(), getPlatformAnalytics);
 
 export default router;

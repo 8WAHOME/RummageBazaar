@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { useClerk } from "@clerk/clerk-react";
-import { api } from "../utils/api.js";
+import { api, parseApiError } from "../utils/api.js";
 import ProductCard from "../components/productCard.jsx";
 import Loader from "../components/loader.jsx";
 import {
@@ -17,7 +17,6 @@ import {
   UserGroupIcon,
   SparklesIcon,
   GiftIcon,
-  UserIcon,
 } from "@heroicons/react/24/outline";
 
 // Cache management utilities
@@ -140,7 +139,7 @@ export default function Dashboard() {
         
         // Load user's products
         const res = await api(`/products?userId=${user.id}`, "GET", null, token);
-        userItems = Array.isArray(res) ? res : [];
+        userItems = Array.isArray(res) ? res : (res?.products || []);
         setItems(userItems);
 
         // Load user profile - THIS IS CRITICAL FOR ROLE CHECK
@@ -198,7 +197,8 @@ export default function Dashboard() {
 
     } catch (err) {
       console.error("Dashboard load error:", err);
-      setError(err.message || "Failed to load dashboard data");
+      const parsedError = parseApiError(err);
+      setError(parsedError.message || "Failed to load dashboard data");
       
       // If we have cached data, use it even if fetch failed
       const cachedData = DashboardCache.get();
@@ -216,50 +216,97 @@ export default function Dashboard() {
   }, [user?.id]);
 
   const markAsSold = async (productId) => {
-    if (!user?.id) return alert("Not signed in");
-    if (!confirm("Mark this listing as SOLD? This will move it to your sales history.")) return;
+    if (!user?.id) {
+      showNotification('Not signed in', 'error');
+      return;
+    }
+
+    // Use custom confirm dialog
+    const confirmed = await customConfirm(
+      "Mark this listing as SOLD? This will move it to your sales history.",
+      "Mark as Sold"
+    );
+    
+    if (!confirmed) {
+      console.log('Mark as sold cancelled by user');
+      showNotification('Sale cancelled', 'info');
+      return;
+    }
     
     setBusyId(productId);
     try {
       const token = await session.getToken();
-      await api(`/products/${productId}/sold`, "PATCH", {}, token);
+      const result = await api(`/products/${productId}/sold`, "PATCH", {}, token);
       
-      // Update local state immediately for better UX
-      setItems((prev) => prev.map((p) => 
-        p._id === productId ? { ...p, status: "sold", soldAt: new Date() } : p
-      ));
-      
-      // Clear cache and reload fresh data
-      DashboardCache.clear();
-      await load(false);
+      if (result?.success) {
+        // Update local state immediately for better UX
+        setItems((prev) => prev.map((p) => 
+          p._id === productId ? { ...p, status: "sold", soldAt: new Date() } : p
+        ));
+        
+        // Clear cache and reload fresh data
+        DashboardCache.clear();
+        await load(false);
+        
+        showNotification('Product marked as sold successfully!', 'success');
+      } else {
+        throw new Error(result?.error || 'Failed to mark as sold');
+      }
       
     } catch (err) {
       console.error("Mark sold error:", err);
-      alert(err.message || "Failed to mark as sold");
+      const parsedError = parseApiError(err);
+      showNotification(parsedError.message || "Failed to mark as sold", 'error');
     } finally {
       setBusyId(null);
     }
   };
 
   const removeListing = async (productId) => {
-    if (!user?.id) return alert("Not signed in");
-    if (!confirm("Delete this listing? This action cannot be undone.")) return;
-    
+    if (!user?.id) {
+      showNotification('Not signed in', 'error');
+      return;
+    }
+
+    // Use customConfirm instead of native confirm
+    const confirmed = await customConfirm(
+      "Delete this listing? This action cannot be undone.",
+      "Confirm Deletion"
+    );
+
+    if (!confirmed) {
+      console.log('Delete cancelled by user');
+      showNotification('Delete cancelled', 'info');
+      return; // STOP HERE if user cancels
+    }
+
     setBusyId(productId);
     try {
       const token = await session.getToken();
-      await api(`/products/${productId}`, "DELETE", null, token);
+      const result = await api(`/products/${productId}`, "DELETE", null, token);
       
-      // Update local state immediately
-      setItems((prev) => prev.filter((p) => p._id !== productId));
+      console.log('Delete result:', result);
       
-      // Clear cache and reload
-      DashboardCache.clear();
-      await load(false);
+      if (result?.success) {
+        // Update local state immediately
+        setItems((prev) => prev.filter((p) => p._id !== productId));
+        
+        // Clear cache and reload
+        DashboardCache.clear();
+        await load(false);
+        
+        showNotification(
+          `Listing "${result.deletedProduct?.title || ''}" deleted successfully`, 
+          'success'
+        );
+      } else {
+        throw new Error(result?.error || 'Failed to delete');
+      }
       
     } catch (err) {
       console.error("Delete error:", err);
-      alert(err.message || "Failed to delete listing");
+      const parsedError = parseApiError(err);
+      showNotification(parsedError.message || "Failed to delete listing", 'error');
     } finally {
       setBusyId(null);
     }
@@ -268,6 +315,7 @@ export default function Dashboard() {
   const handleRefresh = async () => {
     DashboardCache.clear();
     await load(false);
+    showNotification('Dashboard refreshed', 'success');
   };
 
   // Force user sync if profile is missing
@@ -285,14 +333,15 @@ export default function Dashboard() {
       }, token);
       
       console.log('🔄 FORCE SYNC RESULT:', result);
-      alert(`User synced! Role: ${result.user.role}`);
+      showNotification(`User synced! Role: ${result.user?.role || 'user'}`, 'success');
       
       // Reload dashboard
       DashboardCache.clear();
       await load(false);
     } catch (error) {
       console.error('Force sync failed:', error);
-      alert('Sync failed: ' + error.message);
+      const parsedError = parseApiError(error);
+      showNotification('Sync failed: ' + parsedError.message, 'error');
     }
   };
 
@@ -332,7 +381,7 @@ export default function Dashboard() {
                   <p>MongoDB Role: {userProfile?.role || 'Not loaded'}</p>
                   <button 
                     onClick={forceUserSync}
-                    className="mt-1 bg-blue-500 text-white px-2 py-1 rounded text-xs"
+                    className="mt-1 bg-blue-500 text-white px-2 py-1 rounded text-xs hover:bg-blue-600 transition-colors"
                   >
                     Force Sync User
                   </button>
@@ -366,13 +415,13 @@ export default function Dashboard() {
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-4">
                   <img
-                    src={userProfile.avatar || user.imageUrl || "/api/placeholder/100/100"}
-                    alt={userProfile.name || user.fullName}
+                    src={userProfile.avatar || user?.imageUrl || "/api/placeholder/100/100"}
+                    alt={userProfile.name || user?.fullName}
                     className="w-16 h-16 rounded-full object-cover border-2 border-emerald-200"
                   />
                   <div>
-                    <h2 className="text-xl font-bold text-gray-900">{userProfile.name || user.fullName}</h2>
-                    <p className="text-gray-600">{userProfile.email || user.primaryEmailAddress?.emailAddress}</p>
+                    <h2 className="text-xl font-bold text-gray-900">{userProfile.name || user?.fullName}</h2>
+                    <p className="text-gray-600">{userProfile.email || user?.primaryEmailAddress?.emailAddress}</p>
                     <div className="flex items-center gap-2 mt-1">
                       <span className={`px-2 py-1 rounded-full text-xs font-medium ${
                         userProfile.role === 'admin' 

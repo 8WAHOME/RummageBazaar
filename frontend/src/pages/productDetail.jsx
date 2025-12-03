@@ -116,7 +116,7 @@ export default function ProductDetail() {
   
   const whatsappHref = formattedPhone
     ? `https://wa.me/${formattedPhone.replace('+', '')}?text=${encodeURIComponent(
-        `Hi! I'm interested in your product: "${item.title}" (${isDonation ? "FREE" : `KSH ${item.price?.toLocaleString()}`}). Is it still available?`
+        `Hi! I'm interested in your product: "${item.title}" (${isDonation ? "FREE" : `KSH ${item.price?.toLocaleString()}`}). On RummageBazaar Is it still available?`
       )}`
     : null;
 
