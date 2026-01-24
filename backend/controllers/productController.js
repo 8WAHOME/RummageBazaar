@@ -1,28 +1,35 @@
-// backend/controllers/productController.js
+// backend/controllers/productController.js - OPTIMIZED (Part 1)
 import Product from "../models/productModel.js";
 import User from "../models/userModel.js";
 import mongoose from 'mongoose';
 import NodeCache from 'node-cache';
 import rateLimit from 'express-rate-limit';
 
-// Initialize cache with 5-minute TTL
-const cache = new NodeCache({ stdTTL: 300 });
+// CACHE CONFIGURATION - Optimized
+const cache = new NodeCache({ 
+  stdTTL: 300,
+  checkperiod: 60,
+  useClones: false,
+  deleteOnExpire: true,
+  maxKeys: 200
+});
 
-// Create rate limiters
+// RATE LIMITERS
 export const viewCountLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 5, // Limit each IP to 5 requests per windowMs
+  windowMs: 15 * 60 * 1000,
+  max: 10,
   message: { 
     success: false, 
     error: 'Too many view count attempts. Please try again later.' 
   },
   standardHeaders: true,
   legacyHeaders: false,
+  skipSuccessfulRequests: false
 });
 
 export const createProductLimiter = rateLimit({
-  windowMs: 60 * 60 * 1000, // 1 hour
-  max: 10, // Limit each IP to 10 product creations per hour
+  windowMs: 60 * 60 * 1000,
+  max: 15,
   message: { 
     success: false, 
     error: 'Too many products created. Please try again later.' 
@@ -31,7 +38,9 @@ export const createProductLimiter = rateLimit({
   legacyHeaders: false,
 });
 
-// Helper function to sanitize query parameters
+// HELPER FUNCTIONS
+
+// Sanitize query parameters
 const sanitizeQuery = (query) => {
   const sanitized = {};
   Object.keys(query).forEach(key => {
@@ -48,29 +57,62 @@ const sanitizeQuery = (query) => {
 const logger = {
   info: (message, data) => {
     if (process.env.NODE_ENV !== 'test') {
-      console.log(`ℹ️ ${message}`, data || '');
+      console.log(`[INFO] ${message}`, data || '');
     }
   },
   error: (message, error) => {
     if (process.env.NODE_ENV !== 'test') {
-      console.error(`❌ ${message}`, error);
+      console.error(`[ERROR] ${message}`, error);
     }
   },
   debug: (message, data) => {
     if (process.env.NODE_ENV === 'development') {
-      console.debug(`🔍 ${message}`, data || '');
+      console.debug(`[DEBUG] ${message}`, data || '');
+    }
+  },
+  warn: (message, data) => {
+    if (process.env.NODE_ENV !== 'test') {
+      console.warn(`[WARN] ${message}`, data || '');
     }
   }
 };
 
-/* -----------------------------------------------------
-   GET ALL PRODUCTS (with location-based filtering and pagination)
------------------------------------------------------ */
+// Clear products cache
+function clearProductsCache() {
+  const keys = cache.keys();
+  let cleared = 0;
+  keys.forEach(key => {
+    if (key.startsWith('products_') || key.startsWith('platform_analytics')) {
+      cache.del(key);
+      cleared++;
+    }
+  });
+  if (cleared > 0) {
+    logger.info(`Cleared ${cleared} cache entries`);
+  }
+}
+
+// Check if user should be upgraded to seller
+async function shouldUpgradeToSeller(clerkUserId) {
+  try {
+    const user = await User.findOne({ clerkId: clerkUserId }).lean();
+    if (!user) return false;
+    
+    if (user.role === 'admin') return false;
+    
+    return user.totalListings === 0;
+  } catch (error) {
+    logger.error('Error checking seller upgrade:', error);
+    return false;
+  }
+}
+
+// GET ALL PRODUCTS - OPTIMIZED
 export const getProducts = async (req, res) => {
   try {
+    const startTime = Date.now();
     logger.info('GET /api/products called with query:', req.query);
     
-    // Sanitize query parameters
     const sanitizedQuery = sanitizeQuery(req.query);
     const { 
       userId, 
@@ -87,34 +129,33 @@ export const getProducts = async (req, res) => {
       sortOrder = -1
     } = sanitizedQuery;
     
-    // Check cache
+    const validPage = Math.max(1, parseInt(page));
+    const validLimit = Math.min(100, Math.max(1, parseInt(limit)));
+    
     const cacheKey = `products_${JSON.stringify(sanitizedQuery)}`;
     const cachedData = cache.get(cacheKey);
     
     if (cachedData) {
-      logger.info('Returning cached products');
+      logger.info(`Cache HIT - Returned in ${Date.now() - startTime}ms`);
       return res.json(cachedData);
     }
     
+    logger.info('Cache MISS - Querying database');
+    
     const filter = {};
+    
     if (userId) filter.userId = userId;
     if (status) filter.status = status;
-    if (category) filter.category = category;
+    if (category && category !== 'All') filter.category = category;
     
-    // Text search
-    if (search) {
-      filter.$or = [
-        { title: { $regex: search, $options: 'i' } },
-        { description: { $regex: search, $options: 'i' } },
-        { location: { $regex: search, $options: 'i' } }
-      ];
+    if (search && search.trim()) {
+      filter.$text = { $search: search.trim() };
     }
 
-    // Location-based filtering
     if (latitude && longitude) {
-      const maxDistance = parseInt(radius) * 1000; // Convert km to meters
+      const maxDistance = parseInt(radius) * 1000;
       
-      filter.coordinates = {
+      filter['coordinates.coordinates'] = {
         $near: {
           $geometry: {
             type: "Point",
@@ -123,53 +164,40 @@ export const getProducts = async (req, res) => {
           $maxDistance: maxDistance
         }
       };
-    } else if (location) {
-      // Text-based location search
-      filter.location = { $regex: location, $options: 'i' };
+    } else if (location && location.trim()) {
+      filter.location = { $regex: location.trim(), $options: 'i' };
     }
 
-    // Check if Product collection exists and has documents
-    const collectionExists = mongoose.connection.db.collection('products');
-    if (!collectionExists) {
-      logger.info('Products collection does not exist yet');
-      return res.json({
-        success: true,
-        products: [],
-        pagination: {
-          currentPage: 1,
-          totalPages: 0,
-          totalItems: 0,
-          itemsPerPage: parseInt(limit)
-        }
-      });
-    }
-
-    // Calculate skip value for pagination
-    const skip = (parseInt(page) - 1) * parseInt(limit);
+    const skip = (validPage - 1) * validLimit;
     
-    // Get total count for pagination metadata
-    const total = await Product.countDocuments(filter);
+    const [products, total] = await Promise.all([
+      Product.find(filter)
+        .select('title price images category location status isDonation userId views createdAt coordinates')
+        .sort({ [sortBy]: parseInt(sortOrder) })
+        .skip(skip)
+        .limit(validLimit)
+        .lean(),
+      Product.countDocuments(filter)
+    ]);
     
-    // Get products with pagination and sorting
-    const products = await Product.find(filter)
-      .sort({ [sortBy]: parseInt(sortOrder) })
-      .skip(skip)
-      .limit(parseInt(limit));
-    
-    logger.info(`Found ${products.length} products out of ${total}`);
+    const queryTime = Date.now() - startTime;
+    logger.info(`Query completed in ${queryTime}ms - Found ${products.length}/${total} products`);
     
     const response = {
       success: true,
       products,
       pagination: {
-        currentPage: parseInt(page),
-        totalPages: Math.ceil(total / limit),
+        currentPage: validPage,
+        totalPages: Math.ceil(total / validLimit),
         totalItems: total,
-        itemsPerPage: parseInt(limit)
+        itemsPerPage: validLimit
+      },
+      _meta: {
+        queryTime: `${queryTime}ms`,
+        cached: false
       }
     };
     
-    // Cache the response
     cache.set(cacheKey, response);
     
     return res.json(response);
@@ -177,7 +205,8 @@ export const getProducts = async (req, res) => {
   } catch (err) {
     logger.error("GET PRODUCTS ERROR:", err);
     
-    if (err.message.includes('collection') && err.message.includes('not found')) {
+    if (err.name === 'MongoServerError' && err.code === 27) {
+      logger.warn('Text index not found - falling back to regex search');
       return res.json({
         success: true,
         products: [],
@@ -185,8 +214,9 @@ export const getProducts = async (req, res) => {
           currentPage: 1,
           totalPages: 0,
           totalItems: 0,
-          itemsPerPage: 20
-        }
+          itemsPerPage: parseInt(req.query.limit || 20)
+        },
+        warning: 'Search functionality temporarily unavailable'
       });
     }
     
@@ -198,15 +228,20 @@ export const getProducts = async (req, res) => {
   }
 };
 
-/* -----------------------------------------------------
-   GET SINGLE PRODUCT (with view tracking and privacy)
------------------------------------------------------ */
+// GET SINGLE PRODUCT - OPTIMIZED
 export const getProductById = async (req, res) => {
   try {
     const auth = req.auth;
     const clerkUserId = auth?.userId;
     
-    const product = await Product.findById(req.params.id);
+    if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+      return res.status(400).json({ 
+        success: false,
+        error: "Invalid product ID format." 
+      });
+    }
+    
+    const product = await Product.findById(req.params.id).lean();
 
     if (!product) {
       return res.status(404).json({ 
@@ -215,22 +250,25 @@ export const getProductById = async (req, res) => {
       });
     }
 
-    // Check if viewer is the seller or admin
     const isSeller = product.userId === clerkUserId;
-    const isAdmin = await User.isAdmin(clerkUserId);
-
-    // Prepare response data
-    const productData = product.toObject();
+    let isAdmin = false;
     
-    // Hide views from non-sellers/non-admins
+    if (clerkUserId) {
+      isAdmin = await User.isAdmin(clerkUserId);
+    }
+
+    const productData = { ...product };
+    
     if (!isSeller && !isAdmin) {
       delete productData.views;
     }
 
-    // Increment views when product is viewed by non-sellers (async)
-    if (!isSeller) {
-      product.views += 1;
-      product.save().catch(err => logger.error("View count update failed:", err));
+    if (!isSeller && clerkUserId) {
+      Product.findByIdAndUpdate(
+        req.params.id, 
+        { $inc: { views: 1 } },
+        { new: false }
+      ).catch(err => logger.error("View count update failed:", err));
     }
 
     return res.json({
@@ -255,15 +293,20 @@ export const getProductById = async (req, res) => {
   }
 };
 
-/* -----------------------------------------------------
-   CREATE PRODUCT (with location coordinates and user upgrade) - FIXED RESPONSE
------------------------------------------------------ */
+// CREATE PRODUCT - OPTIMIZED
 export const createProduct = async (req, res) => {
   try {
+    const startTime = Date.now();
     const auth = req.auth;
     const clerkUserId = auth?.userId;
 
-    // Sanitize input
+    if (!clerkUserId) {
+      return res.status(401).json({ 
+        success: false,
+        error: "Authentication required." 
+      });
+    }
+
     const sanitizedBody = sanitizeQuery(req.body);
     const {
       title,
@@ -273,13 +316,14 @@ export const createProduct = async (req, res) => {
       countryCode,
       category,
       location,
-      coordinates, // { latitude, longitude }
+      coordinates,
       condition,
       images,
       isDonation
     } = sanitizedBody;
 
-    // Input validation
+    // VALIDATION
+    
     if (!title || title.trim().length < 3) {
       return res.status(400).json({ 
         success: false,
@@ -329,16 +373,20 @@ export const createProduct = async (req, res) => {
       });
     }
 
-    // Validate coordinates if provided
-    if (coordinates && (!coordinates.latitude || !coordinates.longitude)) {
-      return res.status(400).json({ 
-        success: false,
-        error: "Invalid coordinates provided." 
-      });
+    if (coordinates) {
+      const { latitude, longitude } = coordinates;
+      if (!latitude || !longitude || 
+          latitude < -90 || latitude > 90 ||
+          longitude < -180 || longitude > 180) {
+        return res.status(400).json({ 
+          success: false,
+          error: "Invalid coordinates provided." 
+        });
+      }
     }
 
     const uploadedImages = images.filter(img => 
-      img.startsWith("data:image") || img.startsWith("http")
+      typeof img === 'string' && (img.startsWith("data:image") || img.startsWith("http"))
     );
 
     if (uploadedImages.length === 0) {
@@ -348,51 +396,60 @@ export const createProduct = async (req, res) => {
       });
     }
 
-    // Create the product with location data
-    const product = await Product.create({
+    // CREATE PRODUCT
+    
+    const productData = {
       title: title.trim(),
       description: description.trim(),
       price: isDonation ? 0 : Number(price),
-      sellerPhone,
+      sellerPhone: sellerPhone.trim(),
       countryCode: countryCode || "+254",
       category,
-      location,
-      coordinates: coordinates ? {
-        type: "Point",
-        coordinates: [parseFloat(coordinates.longitude), parseFloat(coordinates.latitude)]
-      } : null,
+      location: location.trim(),
       condition: condition || "good",
       images: uploadedImages,
       isDonation: isDonation || false,
       status: "active",
       userId: clerkUserId,
       views: 0
-    });
+    };
 
-    // Update user's listing count and upgrade to seller if first listing
+    if (coordinates && coordinates.latitude && coordinates.longitude) {
+      productData.coordinates = {
+        type: "Point",
+        coordinates: [parseFloat(coordinates.longitude), parseFloat(coordinates.latitude)]
+      };
+    }
+
+    const product = await Product.create(productData);
+
+    // UPDATE USER
+    
+    const shouldUpgrade = await shouldUpgradeToSeller(clerkUserId);
+    
     const userUpdate = await User.findOneAndUpdate(
       { clerkId: clerkUserId },
       { 
         $inc: { totalListings: 1 },
-        ...(await shouldUpgradeToSeller(clerkUserId) && { role: 'seller' })
+        ...(shouldUpgrade && { role: 'seller' })
       },
-      { new: true }
+      { new: true, upsert: false }
     );
 
-    logger.info(`Product created: ${product.title} by user ${clerkUserId}`);
-    if (userUpdate.role === 'seller') {
+    const creationTime = Date.now() - startTime;
+    logger.info(`Product created in ${creationTime}ms: "${product.title}" by ${clerkUserId}`);
+    
+    if (userUpdate?.role === 'seller') {
       logger.info(`User ${clerkUserId} upgraded to seller role`);
     }
 
-    // Clear cache for products
     clearProductsCache();
 
-    // Return product at root level AND in product property for compatibility
     return res.status(201).json({
       success: true,
       message: "Product listed successfully!",
-      _id: product._id, // Root level for compatibility
-      product: { // Also include in product property
+      _id: product._id,
+      product: {
         _id: product._id,
         title: product.title,
         price: product.price,
@@ -403,30 +460,51 @@ export const createProduct = async (req, res) => {
         status: product.status,
         userId: product.userId,
         views: product.views,
-        createdAt: product.createdAt
+        createdAt: product.createdAt,
+        coordinates: product.coordinates
       },
-      userUpgraded: userUpdate.role === 'seller'
+      userUpgraded: shouldUpgrade,
+      _meta: {
+        creationTime: `${creationTime}ms`
+      }
     });
 
   } catch (err) {
     logger.error("CREATE PRODUCT ERROR:", err);
+    
+    if (err.name === 'ValidationError') {
+      return res.status(400).json({ 
+        success: false,
+        error: "Validation error",
+        details: Object.values(err.errors).map(e => e.message)
+      });
+    }
+    
     return res.status(500).json({ 
       success: false,
-      error: "Failed to create product. Please try again." 
+      error: "Failed to create product. Please try again.",
+      details: process.env.NODE_ENV === 'development' ? err.message : undefined
     });
   }
 };
 
-/* -----------------------------------------------------
-   MARK AS SOLD (with enhanced authorization)
------------------------------------------------------ */
+// backend/controllers/productController.js - OPTIMIZED (Part 2)
+// CONTINUE FROM PART 1 - Add these exports after createProduct
+
+// MARK AS SOLD - OPTIMIZED
 export const markProductAsSold = async (req, res) => {
   try {
     const auth = req.auth;
     const clerkUserId = auth?.userId;
     
-    const productId = req.params.id;
-    const product = await Product.findById(productId);
+    if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+      return res.status(400).json({ 
+        success: false,
+        error: "Invalid product ID." 
+      });
+    }
+    
+    const product = await Product.findById(req.params.id);
     
     if (!product) {
       return res.status(404).json({ 
@@ -445,13 +523,10 @@ export const markProductAsSold = async (req, res) => {
       });
     }
 
-    product.status = "sold";
-    product.soldAt = new Date();
-    await product.save();
+    await product.markAsSold();
 
-    logger.info(`Product marked as sold: ${product.title}`);
+    logger.info(`Product marked as sold: "${product.title}"`);
 
-    // Clear cache for products
     clearProductsCache();
 
     return res.json({ 
@@ -469,16 +544,20 @@ export const markProductAsSold = async (req, res) => {
   }
 };
 
-/* -----------------------------------------------------
-   DELETE PRODUCT (FIXED - with proper response structure)
------------------------------------------------------ */
+// DELETE PRODUCT - OPTIMIZED
 export const deleteProduct = async (req, res) => {
   try {
     const auth = req.auth;
     const clerkUserId = auth?.userId;
 
-    const productId = req.params.id;
-    const product = await Product.findById(productId);
+    if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+      return res.status(400).json({ 
+        success: false,
+        error: "Invalid product ID." 
+      });
+    }
+
+    const product = await Product.findById(req.params.id).lean();
     
     if (!product) {
       return res.status(404).json({ 
@@ -497,19 +576,17 @@ export const deleteProduct = async (req, res) => {
       });
     }
 
-    await Product.findByIdAndDelete(productId);
+    await Product.findByIdAndDelete(req.params.id);
 
-    // Update user's listing count if owner deleted it
     if (isOwner) {
       await User.findOneAndUpdate(
         { clerkId: clerkUserId },
         { $inc: { totalListings: -1 } }
-      );
+      ).catch(err => logger.error('Failed to update user listing count:', err));
     }
 
-    logger.info(`Product deleted: ${product.title} by user ${clerkUserId}`);
+    logger.info(`Product deleted: "${product.title}" by ${clerkUserId}`);
 
-    // Clear cache for products
     clearProductsCache();
 
     return res.json({ 
@@ -530,16 +607,13 @@ export const deleteProduct = async (req, res) => {
   }
 };
 
-/* -----------------------------------------------------
-   GET SELLER ANALYTICS (optimized with aggregation)
------------------------------------------------------ */
+// GET SELLER ANALYTICS - OPTIMIZED
 export const getSellerAnalytics = async (req, res) => {
   try {
     const auth = req.auth;
     const clerkUserId = auth?.userId;
     const { userId } = req.params;
 
-    // Verify the authenticated user is requesting their own analytics or is admin
     const isAdmin = await User.isAdmin(clerkUserId);
     if (clerkUserId !== userId && !isAdmin) {
       return res.status(403).json({ 
@@ -620,12 +694,21 @@ export const getSellerAnalytics = async (req, res) => {
   }
 };
 
-/* -----------------------------------------------------
-   INCREMENT VIEW COUNT
------------------------------------------------------ */
+// INCREMENT VIEW COUNT
 export const incrementViewCount = async (req, res) => {
   try {
-    const product = await Product.findById(req.params.id);
+    if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+      return res.status(400).json({ 
+        success: false,
+        error: "Invalid product ID." 
+      });
+    }
+
+    const product = await Product.findByIdAndUpdate(
+      req.params.id,
+      { $inc: { views: 1 } },
+      { new: true, select: 'views' }
+    ).lean();
     
     if (!product) {
       return res.status(404).json({ 
@@ -633,9 +716,6 @@ export const incrementViewCount = async (req, res) => {
         error: "Product not found." 
       });
     }
-
-    product.views += 1;
-    await product.save();
 
     return res.json({ 
       success: true, 
@@ -651,15 +731,12 @@ export const incrementViewCount = async (req, res) => {
   }
 };
 
-/* -----------------------------------------------------
-   ADMIN: GET PLATFORM ANALYTICS
------------------------------------------------------ */
+// GET PLATFORM ANALYTICS (Admin) - OPTIMIZED
 export const getPlatformAnalytics = async (req, res) => {
   try {
     const auth = req.auth;
     const clerkUserId = auth?.userId;
 
-    // Check cache for platform analytics
     const cacheKey = 'platform_analytics';
     const cachedData = cache.get(cacheKey);
     
@@ -668,7 +745,6 @@ export const getPlatformAnalytics = async (req, res) => {
       return res.json(cachedData);
     }
 
-    // Check if user is admin
     const isAdmin = await User.isAdmin(clerkUserId);
     if (!isAdmin) {
       return res.status(403).json({ 
@@ -677,123 +753,130 @@ export const getPlatformAnalytics = async (req, res) => {
       });
     }
 
-    // Get all products
-    const allProducts = await Product.find({});
-    
-    // Get all users
-    const allUsers = await User.find({});
-    
-    // Calculate product statistics
-    const activeListings = allProducts.filter(p => p.status === "active");
-    const soldProducts = allProducts.filter(p => p.status === "sold");
-    const totalRevenue = soldProducts.reduce((sum, item) => sum + (item.price || 0), 0);
-    const totalViews = allProducts.reduce((sum, item) => sum + (item.views || 0), 0);
-    
-    // Calculate user statistics
-    const regularUsers = allUsers.filter(u => u.role === "user").length;
-    const sellers = allUsers.filter(u => u.role === "seller").length;
-    const admins = allUsers.filter(u => u.role === "admin").length;
-    
-    // Calculate category distribution
-    const categoryDistribution = {};
-    allProducts.forEach(product => {
-      if (product.category) {
-        categoryDistribution[product.category] = (categoryDistribution[product.category] || 0) + 1;
-      }
-    });
-    
-    // Calculate monthly growth (last 6 months)
-    const sixMonthsAgo = new Date();
-    sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
-    
-    const monthlyStats = [];
-    for (let i = 5; i >= 0; i--) {
-      const month = new Date();
-      month.setMonth(month.getMonth() - i);
-      const monthStart = new Date(month.getFullYear(), month.getMonth(), 1);
-      const monthEnd = new Date(month.getFullYear(), month.getMonth() + 1, 0);
+    const [productStats, userStats, categoryStats] = await Promise.all([
+      Product.aggregate([
+        {
+          $facet: {
+            overview: [
+              {
+                $group: {
+                  _id: null,
+                  totalListings: { $sum: 1 },
+                  activeListings: { $sum: { $cond: [{ $eq: ["$status", "active"] }, 1, 0] } },
+                  soldItems: { $sum: { $cond: [{ $eq: ["$status", "sold"] }, 1, 0] } },
+                  totalRevenue: { 
+                    $sum: { $cond: [{ $eq: ["$status", "sold"] }, "$price", 0] }
+                  },
+                  totalViews: { $sum: "$views" },
+                  donationCount: { $sum: { $cond: ["$isDonation", 1, 0] } },
+                  avgPrice: { $avg: "$price" }
+                }
+              }
+            ],
+            categoryDist: [
+              { $group: { _id: "$category", count: { $sum: 1 }, avgPrice: { $avg: "$price" } } },
+              { $sort: { count: -1 } },
+              { $limit: 5 }
+            ],
+            monthlyGrowth: [
+              {
+                $group: {
+                  _id: { 
+                    year: { $year: "$createdAt" },
+                    month: { $month: "$createdAt" }
+                  },
+                  listings: { $sum: 1 },
+                  sold: { $sum: { $cond: [{ $eq: ["$status", "sold"] }, 1, 0] } },
+                  revenue: { $sum: { $cond: [{ $eq: ["$status", "sold"] }, "$price", 0] } }
+                }
+              },
+              { $sort: { "_id.year": -1, "_id.month": -1 } },
+              { $limit: 6 }
+            ]
+          }
+        }
+      ]),
       
-      const monthProducts = allProducts.filter(p => 
-        p.createdAt >= monthStart && p.createdAt <= monthEnd
-      );
+      User.aggregate([
+        {
+          $group: {
+            _id: null,
+            totalUsers: { $sum: 1 },
+            regularUsers: { $sum: { $cond: [{ $eq: ["$role", "user"] }, 1, 0] } },
+            sellers: { $sum: { $cond: [{ $eq: ["$role", "seller"] }, 1, 0] } },
+            admins: { $sum: { $cond: [{ $eq: ["$role", "admin"] }, 1, 0] } },
+            activeSellers: { 
+              $sum: { 
+                $cond: [
+                  { $and: [{ $eq: ["$role", "seller"] }, { $gt: ["$totalListings", 0] }] },
+                  1,
+                  0
+                ]
+              }
+            }
+          }
+        }
+      ]),
       
-      const monthSold = monthProducts.filter(p => p.status === "sold");
-      const monthRevenue = monthSold.reduce((sum, item) => sum + (item.price || 0), 0);
-      
-      monthlyStats.push({
-        month: month.toLocaleString('default', { month: 'short' }),
-        year: month.getFullYear(),
-        listings: monthProducts.length,
-        sold: monthSold.length,
-        revenue: monthRevenue
-      });
-    }
+      Product.aggregate([
+        { $group: { _id: "$category", count: { $sum: 1 } } }
+      ])
+    ]);
 
-    // Calculate top performing categories
-    const topCategories = Object.entries(categoryDistribution)
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 5)
-      .map(([category, count]) => ({ category, count }));
-
-    // Calculate average price by category
-    const avgPriceByCategory = {};
-    Object.keys(categoryDistribution).forEach(category => {
-      const categoryProducts = allProducts.filter(p => p.category === category && p.price > 0);
-      if (categoryProducts.length > 0) {
-        avgPriceByCategory[category] = Math.round(
-          categoryProducts.reduce((sum, item) => sum + item.price, 0) / categoryProducts.length
-        );
-      }
-    });
+    const overview = productStats[0].overview[0] || {
+      totalListings: 0,
+      activeListings: 0,
+      soldItems: 0,
+      totalRevenue: 0,
+      totalViews: 0,
+      donationCount: 0,
+      avgPrice: 0
+    };
 
     const analytics = {
       success: true,
       overview: {
-        totalUsers: allUsers.length,
-        totalListings: allProducts.length,
-        activeListings: activeListings.length,
-        soldItems: soldProducts.length,
-        totalRevenue,
-        totalViews,
-        donationCount: allProducts.filter(p => p.isDonation).length,
-        averagePrice: allProducts.length > 0 
-          ? Math.round(allProducts.reduce((sum, item) => sum + (item.price || 0), 0) / allProducts.length)
-          : 0,
+        ...overview,
+        averagePrice: Math.round(overview.avgPrice || 0)
       },
-      userStats: {
-        regularUsers,
-        sellers,
-        admins,
-        newUsersLast30Days: allUsers.filter(u => {
-          const thirtyDaysAgo = new Date();
-          thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-          return u.createdAt >= thirtyDaysAgo;
-        }).length,
-        activeSellers: allUsers.filter(u => u.role === "seller" && u.totalListings > 0).length,
+      userStats: userStats[0] || {
+        totalUsers: 0,
+        regularUsers: 0,
+        sellers: 0,
+        admins: 0,
+        activeSellers: 0
       },
       categoryStats: {
-        totalCategories: Object.keys(categoryDistribution).length,
-        topCategories,
-        avgPriceByCategory,
+        totalCategories: categoryStats.length,
+        topCategories: productStats[0].categoryDist.map(c => ({
+          category: c._id,
+          count: c.count,
+          avgPrice: Math.round(c.avgPrice || 0)
+        }))
       },
-      monthlyGrowth: monthlyStats,
+      monthlyGrowth: productStats[0].monthlyGrowth.reverse().map(m => ({
+        month: new Date(m._id.year, m._id.month - 1).toLocaleString('default', { month: 'short' }),
+        year: m._id.year,
+        listings: m.listings,
+        sold: m.sold,
+        revenue: m.revenue
+      })),
       performance: {
-        conversionRate: allProducts.length > 0 
-          ? Math.round((soldProducts.length / allProducts.length) * 100) 
+        conversionRate: overview.totalListings > 0 
+          ? Math.round((overview.soldItems / overview.totalListings) * 100) 
           : 0,
-        avgViewsPerListing: allProducts.length > 0 
-          ? Math.round(totalViews / allProducts.length) 
+        avgViewsPerListing: overview.totalListings > 0 
+          ? Math.round(overview.totalViews / overview.totalListings) 
           : 0,
-        avgRevenuePerSale: soldProducts.length > 0 
-          ? Math.round(totalRevenue / soldProducts.length) 
-          : 0,
+        avgRevenuePerSale: overview.soldItems > 0 
+          ? Math.round(overview.totalRevenue / overview.soldItems) 
+          : 0
       },
-      timestamp: new Date().toISOString(),
+      timestamp: new Date().toISOString()
     };
 
     logger.info(`Platform analytics generated for admin ${clerkUserId}`);
     
-    // Cache the analytics for 5 minutes
     cache.set(cacheKey, analytics);
     
     return res.json(analytics);
@@ -802,20 +885,18 @@ export const getPlatformAnalytics = async (req, res) => {
     logger.error("GET PLATFORM ANALYTICS ERROR:", err);
     return res.status(500).json({ 
       success: false,
-      error: "Failed to load platform analytics" 
+      error: "Failed to load platform analytics",
+      details: process.env.NODE_ENV === 'development' ? err.message : undefined
     });
   }
 };
 
-/* -----------------------------------------------------
-   UPDATE PRODUCT (Admin only)
------------------------------------------------------ */
+// UPDATE PRODUCT (Admin) - OPTIMIZED
 export const updateProduct = async (req, res) => {
   try {
     const auth = req.auth;
     const clerkUserId = auth?.userId;
 
-    // Only allow admins to edit products
     const isAdmin = await User.isAdmin(clerkUserId);
     if (!isAdmin) {
       return res.status(403).json({ 
@@ -824,11 +905,17 @@ export const updateProduct = async (req, res) => {
       });
     }
 
-    const productId = req.params.id;
+    if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+      return res.status(400).json({ 
+        success: false,
+        error: "Invalid product ID." 
+      });
+    }
+
     const updates = sanitizeQuery(req.body);
 
     const product = await Product.findByIdAndUpdate(
-      productId,
+      req.params.id,
       updates,
       { new: true, runValidators: true }
     );
@@ -840,9 +927,8 @@ export const updateProduct = async (req, res) => {
       });
     }
 
-    logger.info(`Product updated by admin: ${product.title}`);
+    logger.info(`Product updated by admin: "${product.title}"`);
 
-    // Clear cache for products
     clearProductsCache();
 
     return res.json({ 
@@ -860,15 +946,12 @@ export const updateProduct = async (req, res) => {
   }
 };
 
-/* -----------------------------------------------------
-   ADMIN: GET ALL PRODUCTS (with user info)
------------------------------------------------------ */
+// GET ALL PRODUCTS (Admin) - OPTIMIZED
 export const getAllProductsAdmin = async (req, res) => {
   try {
     const auth = req.auth;
     const clerkUserId = auth?.userId;
 
-    // Check if user is admin
     const isAdmin = await User.isAdmin(clerkUserId);
     if (!isAdmin) {
       return res.status(403).json({ 
@@ -877,31 +960,29 @@ export const getAllProductsAdmin = async (req, res) => {
       });
     }
 
-    // Get pagination parameters
     const { page = 1, limit = 50 } = req.query;
-    const skip = (parseInt(page) - 1) * parseInt(limit);
+    const validPage = Math.max(1, parseInt(page));
+    const validLimit = Math.min(100, Math.max(1, parseInt(limit)));
+    const skip = (validPage - 1) * validLimit;
 
     const [products, total] = await Promise.all([
       Product.find({})
+        .select('title price category status userId createdAt views isDonation location')
         .sort({ createdAt: -1 })
         .skip(skip)
-        .limit(parseInt(limit)),
+        .limit(validLimit)
+        .lean(),
       Product.countDocuments({})
     ]);
 
     res.json({
       success: true,
-      products: products.map(product => ({
-        ...product.toObject(),
-        sellerInfo: {
-          userId: product.userId,
-        }
-      })),
+      products,
       pagination: {
-        currentPage: parseInt(page),
-        totalPages: Math.ceil(total / limit),
+        currentPage: validPage,
+        totalPages: Math.ceil(total / validLimit),
         totalItems: total,
-        itemsPerPage: parseInt(limit)
+        itemsPerPage: validLimit
       }
     });
 
@@ -914,9 +995,7 @@ export const getAllProductsAdmin = async (req, res) => {
   }
 };
 
-/* -----------------------------------------------------
-   GET PRODUCTS BY LOCATION (dedicated endpoint)
------------------------------------------------------ */
+// GET PRODUCTS BY LOCATION - OPTIMIZED
 export const getProductsByLocation = async (req, res) => {
   try {
     const { latitude, longitude, radius = 50, category } = req.query;
@@ -928,29 +1007,12 @@ export const getProductsByLocation = async (req, res) => {
       });
     }
 
-    const maxDistance = parseInt(radius) * 1000; // Convert km to meters
-    
-    const filter = {
-      coordinates: {
-        $near: {
-          $geometry: {
-            type: "Point",
-            coordinates: [parseFloat(longitude), parseFloat(latitude)]
-          },
-          $maxDistance: maxDistance
-        }
-      },
-      status: "active"
+    const options = {
+      category: category && category !== 'All' ? category : undefined,
+      limit: 100
     };
 
-    if (category && category !== 'All') {
-      filter.category = category;
-    }
-
-    const products = await Product.find(filter)
-      .hint({ coordinates: '2dsphere' }) // Use geospatial index
-      .sort({ createdAt: -1 })
-      .limit(100); // Limit results for performance
+    const products = await Product.findNearby(longitude, latitude, parseInt(radius), options);
 
     logger.info(`Found ${products.length} products within ${radius}km of [${latitude}, ${longitude}]`);
 
@@ -969,20 +1031,18 @@ export const getProductsByLocation = async (req, res) => {
     logger.error("GET PRODUCTS BY LOCATION ERROR:", err);
     res.status(500).json({ 
       success: false,
-      error: "Failed to load products by location" 
+      error: "Failed to load products by location",
+      details: process.env.NODE_ENV === 'development' ? err.message : undefined
     });
   }
 };
 
-/* -----------------------------------------------------
-   ADMIN: DELETE ANY PRODUCT
------------------------------------------------------ */
+// DELETE PRODUCT (Admin) - OPTIMIZED
 export const deleteProductAdmin = async (req, res) => {
   try {
     const auth = req.auth;
     const clerkUserId = auth?.userId;
 
-    // Check if user is admin
     const isAdmin = await User.isAdmin(clerkUserId);
     if (!isAdmin) {
       return res.status(403).json({ 
@@ -991,8 +1051,14 @@ export const deleteProductAdmin = async (req, res) => {
       });
     }
 
-    const productId = req.params.id;
-    const product = await Product.findByIdAndDelete(productId);
+    if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+      return res.status(400).json({ 
+        success: false,
+        error: "Invalid product ID." 
+      });
+    }
+
+    const product = await Product.findByIdAndDelete(req.params.id).lean();
 
     if (!product) {
       return res.status(404).json({ 
@@ -1001,7 +1067,6 @@ export const deleteProductAdmin = async (req, res) => {
       });
     }
 
-    // Clear cache for products
     clearProductsCache();
 
     res.json({
@@ -1021,47 +1086,3 @@ export const deleteProductAdmin = async (req, res) => {
     });
   }
 };
-
-// Helper function to check if user should be upgraded to seller
-async function shouldUpgradeToSeller(clerkUserId) {
-  const user = await User.findOne({ clerkId: clerkUserId });
-  if (!user) return false;
-  
-  // Don't upgrade admins
-  if (user.role === 'admin') return false;
-  
-  // Upgrade if this is their first listing (totalListings will be 0 before increment)
-  return user.totalListings === 0;
-}
-
-// Helper function to clear products cache
-function clearProductsCache() {
-  const keys = cache.keys();
-  keys.forEach(key => {
-    if (key.startsWith('products_')) {
-      cache.del(key);
-    }
-  });
-}
-// Delete product (DELETE /api/products/:id)
-// export const deleteProduct = async (req, res) => {
-//   try {
-//     const auth = req.auth?.();
-//     const clerkUserId = auth?.userId;
-
-//     const productId = req.params.id;
-//     const product = await Product.findById(productId);
-//     if (!product) return res.status(404).json({ error: "Product not found." });
-
-//     if (product.userId && clerkUserId && product.userId !== clerkUserId) {
-//       return res.status(403).json({ error: "Unauthorized" });
-//     }
-
-//     await Product.deleteOne({ _id: productId });
-
-//     return res.json({ ok: true });
-//   } catch (err) {
-//     console.error("DELETE PRODUCT ERROR:", err);
-//     return res.status(500).json({ error: "Failed to delete product." });
-//   }
-// };
