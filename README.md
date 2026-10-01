@@ -67,8 +67,6 @@ RummageBazaar/
 │
 └── README.md
 
-yaml
-Copy code
 
 ---
 
@@ -78,8 +76,6 @@ Copy code
 VITE_CLERK_PUBLISHABLE_KEY=pk_test_xxxxxxxxxxxxxxxxx
 VITE_API_BASE_URL=https://your-backend-render-url
 
-markdown
-Copy code
 
 ### **Backend (.env)**
 MONGO_URI=mongodb+srv://<username>:<password>@cluster.mongodb.net/rummage
@@ -87,8 +83,6 @@ CLERK_PUBLISHABLE_KEY=pk_test_xxxxx
 CLERK_SECRET_KEY=sk_test_xxxxx
 PORT=5000
 
-yaml
-Copy code
 
 ---
 
