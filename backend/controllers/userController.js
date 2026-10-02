@@ -1,41 +1,47 @@
 // backend/controllers/userController.js
+import { getAuth, clerkClient } from "@clerk/express";
 import User from "../models/userModel.js";
 
 export const syncUser = async (req, res) => {
   try {
-    const { id, email, firstName, lastName, imageUrl } = req.body;
+    // Identity comes from the verified Clerk session, NOT from the request body.
+    const { userId: clerkId } = getAuth(req);
+    if (!clerkId) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
 
-    // Map frontend fields to backend model fields
-    const clerkId = id;
-    const name = firstName && lastName ? `${firstName} ${lastName}` : firstName || 'User';
-    const avatar = imageUrl;
+    // Fetch trusted profile data from Clerk's API
+    const cu = await clerkClient.users.getUser(clerkId);
+    const primary = cu.emailAddresses?.find(e => e.id === cu.primaryEmailAddressId)
+      || cu.emailAddresses?.[0];
+    const email = primary?.emailAddress;
+    const name = [cu.firstName, cu.lastName].filter(Boolean).join(' ') || 'User';
+    const avatar = cu.imageUrl;
 
-    // Check if this should be an admin (based on email)
-    const isAdmin = await checkIfAdmin(email);
+    // Only grant admin for a VERIFIED email that is on the admin list
+    const isAdmin = primary?.verification?.status === 'verified' && await checkIfAdmin(email);
 
     let user = await User.findOne({ clerkId });
 
     if (!user) {
-      user = await User.create({ 
-        clerkId, 
-        email, 
-        name, 
+      user = await User.create({
+        clerkId,
+        email,
+        name,
         avatar,
-        role: isAdmin ? "admin" : "user", // Start as user, will become seller after first listing
+        role: isAdmin ? "admin" : "user", // becomes seller after first listing
         lastLogin: new Date()
       });
     } else {
-      // Update existing user
       user.email = email;
       user.name = name;
       user.avatar = avatar;
       user.lastLogin = new Date();
-      
-      // Update role if email matches admin criteria
+
       if (isAdmin && user.role !== 'admin') {
         user.role = 'admin';
       }
-      
+
       await user.save();
     }
 
@@ -54,7 +60,7 @@ export const syncUser = async (req, res) => {
 
   } catch (err) {
     console.error("USER SYNC ERROR:", err);
-    return res.status(500).json({ 
+    return res.status(500).json({
       error: "Failed to sync user",
       details: process.env.NODE_ENV === 'development' ? err.message : undefined
     });
@@ -96,8 +102,7 @@ export const updateToSeller = async (req, res) => {
 // Get user profile
 export const getUserProfile = async (req, res) => {
   try {
-    const auth = req.auth;
-    const clerkUserId = auth?.userId;
+    const { userId: clerkUserId } = getAuth(req);
     const { userId } = req.params;
 
     // Users can only view their own profile unless admin
@@ -136,8 +141,7 @@ export const getUserProfile = async (req, res) => {
 // Get all users (admin only)
 export const getAllUsers = async (req, res) => {
   try {
-    const auth = req.auth;
-    const clerkUserId = auth?.userId;
+    const { userId: clerkUserId } = getAuth(req);
 
     // Check if user is admin
     const isAdmin = await User.isAdmin(clerkUserId);
@@ -170,8 +174,7 @@ export const getAllUsers = async (req, res) => {
 // Update user role (admin only)
 export const updateUserRole = async (req, res) => {
   try {
-    const auth = req.auth;
-    const clerkUserId = auth?.userId;
+    const { userId: clerkUserId } = getAuth(req);
     const { userId } = req.params;
     const { role } = req.body;
 
@@ -222,11 +225,6 @@ async function checkIfAdmin(email) {
     process.env.ADMIN_EMAILS.split(',').map(e => e.trim().toLowerCase()) : 
     ['8wahome@gmail.com', '8ndiritu@gmail.com'];
   
-  console.log('Checking admin status for:', email.toLowerCase());
-  console.log('Admin emails:', adminEmails);
   
-  const isAdmin = adminEmails.includes(email.toLowerCase());
-  console.log('Is admin?', isAdmin);
-  
-  return isAdmin;
+  return adminEmails.includes(email.toLowerCase());
 }

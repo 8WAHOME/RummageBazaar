@@ -4,6 +4,7 @@ import User from "../models/userModel.js";
 import mongoose from 'mongoose';
 import NodeCache from 'node-cache';
 import rateLimit from 'express-rate-limit';
+import { getAuth, clerkClient } from '@clerk/express';
 
 // CACHE CONFIGURATION - Optimized
 const cache = new NodeCache({ 
@@ -89,6 +90,34 @@ function clearProductsCache() {
   });
   if (cleared > 0) {
     logger.info(`Cleared ${cleared} cache entries`);
+  }
+}
+
+// Make sure a Mongo user exists for this Clerk user (covers a fresh/empty database
+// or a user who never hit /api/users/sync). Never throws: listing must not fail because of this.
+async function ensureUserExists(clerkUserId) {
+  try {
+    const existing = await User.findOne({ clerkId: clerkUserId }).select('_id').lean();
+    if (existing) return;
+
+    const cu = await clerkClient.users.getUser(clerkUserId);
+    const email = cu.emailAddresses?.find(e => e.id === cu.primaryEmailAddressId)?.emailAddress
+      || cu.emailAddresses?.[0]?.emailAddress;
+    const name = [cu.firstName, cu.lastName].filter(Boolean).join(' ') || 'User';
+
+    await User.create({
+      clerkId: clerkUserId,
+      email,
+      name,
+      avatar: cu.imageUrl,
+      role: 'user',
+      lastLogin: new Date()
+    });
+    logger.info(`Lazily created missing user record for ${clerkUserId}`);
+  } catch (error) {
+    if (error?.code !== 11000) { // 11000 = duplicate key (created concurrently) - fine
+      logger.warn('ensureUserExists failed (continuing):', error.message);
+    }
   }
 }
 
@@ -231,8 +260,7 @@ export const getProducts = async (req, res) => {
 // GET SINGLE PRODUCT - OPTIMIZED
 export const getProductById = async (req, res) => {
   try {
-    const auth = req.auth;
-    const clerkUserId = auth?.userId;
+    const { userId: clerkUserId } = getAuth(req);
     
     if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
       return res.status(400).json({ 
@@ -297,8 +325,7 @@ export const getProductById = async (req, res) => {
 export const createProduct = async (req, res) => {
   try {
     const startTime = Date.now();
-    const auth = req.auth;
-    const clerkUserId = auth?.userId;
+    const { userId: clerkUserId } = getAuth(req);
 
     if (!clerkUserId) {
       return res.status(401).json({ 
@@ -425,6 +452,8 @@ export const createProduct = async (req, res) => {
 
     // UPDATE USER
     
+    await ensureUserExists(clerkUserId);
+
     const shouldUpgrade = await shouldUpgradeToSeller(clerkUserId);
     
     const userUpdate = await User.findOneAndUpdate(
@@ -494,8 +523,7 @@ export const createProduct = async (req, res) => {
 // MARK AS SOLD - OPTIMIZED
 export const markProductAsSold = async (req, res) => {
   try {
-    const auth = req.auth;
-    const clerkUserId = auth?.userId;
+    const { userId: clerkUserId } = getAuth(req);
     
     if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
       return res.status(400).json({ 
@@ -547,8 +575,7 @@ export const markProductAsSold = async (req, res) => {
 // DELETE PRODUCT - OPTIMIZED
 export const deleteProduct = async (req, res) => {
   try {
-    const auth = req.auth;
-    const clerkUserId = auth?.userId;
+    const { userId: clerkUserId } = getAuth(req);
 
     if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
       return res.status(400).json({ 
@@ -610,8 +637,7 @@ export const deleteProduct = async (req, res) => {
 // GET SELLER ANALYTICS - OPTIMIZED
 export const getSellerAnalytics = async (req, res) => {
   try {
-    const auth = req.auth;
-    const clerkUserId = auth?.userId;
+    const { userId: clerkUserId } = getAuth(req);
     const { userId } = req.params;
 
     const isAdmin = await User.isAdmin(clerkUserId);
@@ -734,8 +760,7 @@ export const incrementViewCount = async (req, res) => {
 // GET PLATFORM ANALYTICS (Admin) - OPTIMIZED
 export const getPlatformAnalytics = async (req, res) => {
   try {
-    const auth = req.auth;
-    const clerkUserId = auth?.userId;
+    const { userId: clerkUserId } = getAuth(req);
 
     const cacheKey = 'platform_analytics';
     const cachedData = cache.get(cacheKey);
@@ -894,8 +919,7 @@ export const getPlatformAnalytics = async (req, res) => {
 // UPDATE PRODUCT (Admin) - OPTIMIZED
 export const updateProduct = async (req, res) => {
   try {
-    const auth = req.auth;
-    const clerkUserId = auth?.userId;
+    const { userId: clerkUserId } = getAuth(req);
 
     const isAdmin = await User.isAdmin(clerkUserId);
     if (!isAdmin) {
@@ -949,8 +973,7 @@ export const updateProduct = async (req, res) => {
 // GET ALL PRODUCTS (Admin) - OPTIMIZED
 export const getAllProductsAdmin = async (req, res) => {
   try {
-    const auth = req.auth;
-    const clerkUserId = auth?.userId;
+    const { userId: clerkUserId } = getAuth(req);
 
     const isAdmin = await User.isAdmin(clerkUserId);
     if (!isAdmin) {
@@ -1040,8 +1063,7 @@ export const getProductsByLocation = async (req, res) => {
 // DELETE PRODUCT (Admin) - OPTIMIZED
 export const deleteProductAdmin = async (req, res) => {
   try {
-    const auth = req.auth;
-    const clerkUserId = auth?.userId;
+    const { userId: clerkUserId } = getAuth(req);
 
     const isAdmin = await User.isAdmin(clerkUserId);
     if (!isAdmin) {

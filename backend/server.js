@@ -1,12 +1,14 @@
 // server.js - Optimized for Performance
 import express from 'express';
 import path from 'path';
+import fs from 'fs';
 import { fileURLToPath } from 'url';
 import cors from 'cors';
 import mongoose from 'mongoose';
 import dotenv from 'dotenv';
 import compression from 'compression';
 import helmet from 'helmet';
+import { clerkMiddleware } from '@clerk/express';
 import productRoutes from "./routes/productRoutes.js";
 import userRoutes from "./routes/userRoutes.js";
 
@@ -17,6 +19,10 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
+
+// Render runs behind a reverse proxy. Without this every visitor shares one IP
+// and express-rate-limit buckets everyone together.
+app.set('trust proxy', 1);
 
 // Security & Performance Middleware (ORDER MATTERS - these go first)
 app.use(helmet({
@@ -51,30 +57,42 @@ app.use(cors());
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
+// Clerk: parses the session token on every request so getAuth(req) works in controllers.
+// Requires CLERK_SECRET_KEY and CLERK_PUBLISHABLE_KEY in the environment.
+app.use(clerkMiddleware());
+
 // MongoDB Connection with Pooling and Error Handling
 const MONGODB_URI = process.env.MONGO_URI || 'mongodb://localhost:27017/rummagebazaar';
 
 console.log('[INFO] Attempting MongoDB connection...');
 
-mongoose.connect(MONGODB_URI, {
+const MONGO_OPTIONS = {
   maxPoolSize: 10,
   minPoolSize: 2,
-  serverSelectionTimeoutMS: 5000,
+  serverSelectionTimeoutMS: 10000,
   socketTimeoutMS: 45000,
   family: 4,
   retryWrites: true,
   w: 'majority'
-})
-  .then(() => {
+};
+
+// Retry instead of process.exit(1). A crash-loop makes Render answer with 502s that
+// carry no CORS headers, which the browser reports as a generic "fetch failed".
+// Staying up lets /api/health report the real state and API calls return proper errors.
+async function connectWithRetry(attempt = 1) {
+  try {
+    await mongoose.connect(MONGODB_URI, MONGO_OPTIONS);
     console.log('[SUCCESS] MongoDB connected successfully');
     console.log('[INFO] Database:', mongoose.connection.db.databaseName);
     console.log('[INFO] Connection pool ready');
-  })
-  .catch(err => {
-    console.error('[ERROR] MongoDB connection error:', err.message);
-    console.log('[WARN] Please check your MONGO_URI environment variable');
-    process.exit(1);
-  });
+  } catch (err) {
+    console.error(`[ERROR] MongoDB connection failed (attempt ${attempt}):`, err.message);
+    console.log('[WARN] Check MONGO_URI on Render and the Atlas Network Access allowlist. Retrying in 5s...');
+    setTimeout(() => connectWithRetry(attempt + 1), 5000);
+  }
+}
+
+connectWithRetry();
 
 // MongoDB Connection Event Handlers
 mongoose.connection.on('error', err => {
@@ -169,7 +187,6 @@ let staticServed = false;
 staticPaths.forEach(staticPath => {
   if (!staticServed) {
     try {
-      const fs = require('fs');
       if (fs.existsSync(staticPath)) {
         app.use(express.static(staticPath, {
           maxAge: '1d',
@@ -185,7 +202,7 @@ staticPaths.forEach(staticPath => {
 });
 
 // Fallback for SPA routing - serve index.html for all other routes
-app.get('*', (req, res) => {
+app.get(/.*/, (req, res) => {
   // Handle API routes that don't exist
   if (req.path.startsWith('/api/')) {
     return res.status(404).json({ 
@@ -211,7 +228,6 @@ app.get('*', (req, res) => {
 
   for (const indexPath of possibleIndexPaths) {
     try {
-      const fs = require('fs');
       if (fs.existsSync(indexPath)) {
         return res.sendFile(indexPath);
       }
