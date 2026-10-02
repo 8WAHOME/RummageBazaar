@@ -2,7 +2,7 @@ import { Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { api } from "./utils/api.js";
 import { notification } from "./utils/notifications.js";
-import { SignedIn, SignedOut, RedirectToSignIn, useUser } from "@clerk/clerk-react";
+import { SignedIn, SignedOut, RedirectToSignIn, useUser, useAuth } from "@clerk/clerk-react";
 
 import Navbar from "./components/navbar.jsx";
 import Footer from "./components/footer.jsx";
@@ -25,6 +25,7 @@ import AdminAnalytics from "./pages/admin/AdminAnalytics.jsx";
 
 function App() {
   const { user, isLoaded } = useUser();
+  const { getToken } = useAuth();
   const location = useLocation();
   const [loading, setLoading] = useState(false);
 
@@ -38,14 +39,9 @@ function App() {
   // Sync user with backend
   useEffect(() => {
     if (user && isLoaded) {
-      api("/users/sync", "POST", {
-        id: user.id,
-        email: user.primaryEmailAddress?.emailAddress,
-        firstName: user.firstName,
-        lastName: user.lastName,
-        imageUrl: user.imageUrl,
-        username: user.username
-      })
+      // The backend now identifies the user from the Clerk token, so the token is required.
+      getToken()
+      .then(token => api("/users/sync", "POST", {}, token))
       .then(() => console.log("User synced successfully"))
       .catch(err => {
         console.warn("User sync warning:", err.message);

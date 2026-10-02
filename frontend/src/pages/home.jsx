@@ -234,10 +234,10 @@ export default function Home() {
       <section className="max-w-7xl mx-auto px-4 py-16 lg:py-24">
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-8 text-center">
           {[
-            { icon: ShoppingBagIcon, value: "1000+", label: "Active Listings" },
-            { icon: HeartIcon, value: "98%", label: "Satisfied Users" },
-            { icon: GlobeAltIcon, value: "50+", label: "Cities Covered" },
-            { icon: TrophyIcon, value: "4.9/5", label: "User Rating" },
+            { icon: HeartIcon, value: "Free", label: "Donate items to people who need them" },
+            { icon: GlobeAltIcon, value: "Local", label: "Find listings near you" },
+            { icon: SparklesIcon, value: "Simple", label: "List an item in minutes" },
+            { icon: TrophyIcon, value: "Green", label: "Reuse more, waste less (SDG 12)" },
           ].map((stat) => {
             const IconComponent = stat.icon;
             return (

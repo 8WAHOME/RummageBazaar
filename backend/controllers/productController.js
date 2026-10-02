@@ -182,15 +182,21 @@ export const getProducts = async (req, res) => {
     }
 
     if (latitude && longitude) {
-      const maxDistance = parseInt(radius) * 1000;
-      
-      filter['coordinates.coordinates'] = {
-        $near: {
-          $geometry: {
-            type: "Point",
-            coordinates: [parseFloat(longitude), parseFloat(latitude)]
-          },
-          $maxDistance: maxDistance
+      const lat = parseFloat(latitude);
+      const lng = parseFloat(longitude);
+      const radiusKm = Math.max(1, parseInt(radius) || 50);
+
+      if (Number.isNaN(lat) || Number.isNaN(lng) || lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+        return res.status(400).json({ success: false, error: "Invalid latitude/longitude." });
+      }
+
+      // $geoWithin + $centerSphere instead of $near:
+      // countDocuments() does not support $near/$nearSphere (it throws), which made the
+      // whole request fail. $geoWithin works with find() AND countDocuments(), and needs no
+      // special index. Earth radius = 6378.1 km, so the radius is passed in radians.
+      filter.geo = {
+        $geoWithin: {
+          $centerSphere: [[lng, lat], radiusKm / 6378.1]
         }
       };
     } else if (location && location.trim()) {
@@ -442,10 +448,11 @@ export const createProduct = async (req, res) => {
     };
 
     if (coordinates && coordinates.latitude && coordinates.longitude) {
-      productData.coordinates = {
-        type: "Point",
-        coordinates: [parseFloat(coordinates.longitude), parseFloat(coordinates.latitude)]
-      };
+      const lat = parseFloat(coordinates.latitude);
+      const lng = parseFloat(coordinates.longitude);
+      productData.coordinates = { latitude: lat, longitude: lng };
+      // GeoJSON copy for radius queries ([longitude, latitude] order)
+      productData.geo = { type: "Point", coordinates: [lng, lat] };
     }
 
     const product = await Product.create(productData);

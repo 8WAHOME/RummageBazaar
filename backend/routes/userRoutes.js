@@ -6,18 +6,18 @@ import {
   getAllUsers, 
   updateUserRole 
 } from "../controllers/userController.js";
-import { requireAuth } from "@clerk/express";
+import requireAuth from "../middleware/clerkAuth.js";
 
 const router = express.Router();
 
 // User sync
-router.post("/sync", requireAuth(), syncUser);
+router.post("/sync", requireAuth, syncUser);
 
 // Get user profile
-router.get("/profile/:userId", requireAuth(), getUserProfile);
+router.get("/profile/:userId", requireAuth, getUserProfile);
 
 // Admin routes
-router.get("/", requireAuth(), getAllUsers);
-router.patch("/:userId/role", requireAuth(), updateUserRole);
+router.get("/", requireAuth, getAllUsers);
+router.patch("/:userId/role", requireAuth, updateUserRole);
 
 export default router;

@@ -1,184 +1,102 @@
-import { Link, useNavigate } from "react-router-dom";
+import { Link, NavLink, useNavigate } from "react-router-dom";
 import { SignedIn, SignedOut, useUser, useClerk } from "@clerk/clerk-react";
-import { useEffect, useState } from "react";
-import { api } from "../utils/api";
+import { useState } from "react";
+
+// NOTE: user sync with the backend is done once in App.jsx (with the Clerk token),
+// so it is intentionally not repeated here.
+
+const linkClass = ({ isActive }) =>
+  `px-3 py-2 rounded-lg text-sm font-medium transition ${
+    isActive ? "text-emerald-700 bg-emerald-50" : "text-slate-600 hover:text-emerald-700 hover:bg-slate-50"
+  }`;
 
 export default function Navbar() {
   const navigate = useNavigate();
   const { user } = useUser();
   const clerk = useClerk();
-  const [isMenuOpen, setIsMenuOpen] = useState(false);
-
-  // Sync Clerk user to MongoDB 
-  useEffect(() => {
-    if (!user) return;
-
-    api("/users/sync", "POST", {
-      clerkId: user.id,
-      email: user.primaryEmailAddress?.emailAddress,
-      name: user.fullName,
-      avatar: user.imageUrl,
-    }).catch(() => {});
-  }, [user]);
+  const [open, setOpen] = useState(false);
 
   const handleSignOut = async () => {
     try {
+      setOpen(false);
       await clerk.signOut();
-      navigate("/"); // Redirect to home after sign out
+      navigate("/");
     } catch (error) {
       console.error("Sign out error:", error);
     }
   };
 
+  const close = () => setOpen(false);
+  const ghostBtn =
+    "px-4 py-2 rounded-lg text-sm font-semibold border border-slate-200 text-slate-700 hover:border-emerald-500 hover:text-emerald-700 transition";
+  const solidBtn =
+    "px-4 py-2 rounded-lg text-sm font-semibold bg-emerald-600 text-white shadow-sm hover:bg-emerald-700 transition";
+
   return (
-    <nav className="bg-white border-b sticky top-0 z-50">
+    <nav className="sticky top-0 z-50 bg-white/85 backdrop-blur-md border-b border-slate-200/70">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
-          
-          {/* Left — Logo */}
-          <div className="flex items-center gap-6">
-            <Link to="/" className="flex items-center gap-3" onClick={() => setIsMenuOpen(false)}>
-              <div className="w-10 h-10 bg-emerald-600 rounded-md flex items-center justify-center text-white font-bold">
-                RB
-              </div>
-              <div className="text-lg font-semibold text-emerald-700 hidden sm:block">
-                RummageBazaar
-              </div>
-            </Link>
-          </div>
+          {/* Logo */}
+          <Link to="/" onClick={close} className="flex items-center gap-2.5">
+            <span className="w-9 h-9 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 text-white font-bold text-sm flex items-center justify-center shadow-sm">
+              RB
+            </span>
+            <span className="text-lg font-bold tracking-tight text-slate-900 hidden sm:block">
+              Rummage<span className="text-emerald-600">Bazaar</span>
+            </span>
+          </Link>
 
-          {/* Middle — Desktop Links */}
-          <div className="hidden md:flex items-center gap-6 text-gray-700">
-            <Link to="/" className="hover:text-emerald-600 transition-colors">Home</Link>
-            <Link to="/browse" className="hover:text-emerald-600 transition-colors">Browse</Link>
+          {/* Desktop links */}
+          <div className="hidden md:flex items-center gap-1">
+            <NavLink to="/" end className={linkClass}>Home</NavLink>
+            <NavLink to="/browse" className={linkClass}>Browse</NavLink>
             <SignedIn>
-              <Link
-                to="/create"
-                className="bg-emerald-600 text-white px-4 py-2 rounded-md hover:bg-emerald-700 transition-colors"
-              >
-                Sell Item
-              </Link>
+              <NavLink to="/dashboard" className={linkClass}>Dashboard</NavLink>
             </SignedIn>
           </div>
 
-          {/* Right — Desktop Auth */}
+          {/* Desktop actions */}
           <div className="hidden md:flex items-center gap-3">
             <SignedIn>
-              <Link
-                to="/dashboard"
-                className="px-4 py-2 rounded-md border border-emerald-600 text-emerald-600 hover:bg-emerald-50 transition-colors"
-              >
-                Dashboard
-              </Link>
-
-              <button
-                onClick={handleSignOut}
-                className="px-4 py-2 rounded-md border border-emerald-600 text-emerald-600 hover:bg-emerald-50 transition-colors"
-                aria-label="Sign out"
-              >
-                Sign out
-              </button>
+              <Link to="/create" className={solidBtn}>+ Sell item</Link>
+              {user?.imageUrl && (
+                <img src={user.imageUrl} alt="" className="w-9 h-9 rounded-full ring-2 ring-emerald-100 object-cover" />
+              )}
+              <button onClick={handleSignOut} className={ghostBtn} aria-label="Sign out">Sign out</button>
             </SignedIn>
-
             <SignedOut>
-              <Link
-                to="/sign-in"
-                className="px-4 py-2 rounded-md border border-emerald-600 text-emerald-600 hover:bg-emerald-50 transition-colors"
-              >
-                Login
-              </Link>
-              <Link
-                to="/sign-up"
-                className="px-4 py-2 rounded-md bg-emerald-600 text-white hover:bg-emerald-700 transition-colors"
-              >
-                Sign Up
-              </Link>
+              <Link to="/sign-in" className={ghostBtn}>Login</Link>
+              <Link to="/sign-up" className={solidBtn}>Sign up</Link>
             </SignedOut>
           </div>
 
-          {/* Mobile Menu Button */}
-          <div className="md:hidden flex items-center">
-            <button
-              onClick={() => setIsMenuOpen(!isMenuOpen)}
-              className="text-gray-700 hover:text-emerald-600 p-2 transition-colors"
-              aria-label="Toggle menu"
-            >
-              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                {isMenuOpen ? (
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                ) : (
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-                )}
-              </svg>
-            </button>
-          </div>
+          {/* Mobile toggle */}
+          <button
+            onClick={() => setOpen(!open)}
+            className="md:hidden p-2 rounded-lg text-slate-700 hover:bg-slate-100 transition"
+            aria-label="Toggle menu"
+            aria-expanded={open}
+          >
+            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={open ? "M6 18L18 6M6 6l12 12" : "M4 6h16M4 12h16M4 18h16"} />
+            </svg>
+          </button>
         </div>
 
-        {/* Mobile Menu */}
-        {isMenuOpen && (
-          <div className="md:hidden border-t border-gray-200 py-4 bg-white">
-            <div className="flex flex-col space-y-3">
-              <Link 
-                to="/" 
-                className="text-gray-700 hover:text-emerald-600 py-2 px-4 transition-colors"
-                onClick={() => setIsMenuOpen(false)}
-              >
-                Home
-              </Link>
-              
-              <Link 
-                to="/browse" 
-                className="text-gray-700 hover:text-emerald-600 py-2 px-4 transition-colors"
-                onClick={() => setIsMenuOpen(false)}
-              >
-                Browse
-              </Link>
-
-              <SignedIn>
-                <Link 
-                  to="/create" 
-                  className="text-gray-700 hover:text-emerald-600 py-2 px-4 transition-colors"
-                  onClick={() => setIsMenuOpen(false)}
-                >
-                  Sell Item
-                </Link>
-
-                <Link 
-                  to="/dashboard" 
-                  className="text-gray-700 hover:text-emerald-600 py-2 px-4 transition-colors"
-                  onClick={() => setIsMenuOpen(false)}
-                >
-                  Dashboard
-                </Link>
-
-                <button
-                  onClick={() => {
-                    handleSignOut();
-                    setIsMenuOpen(false);
-                  }}
-                  className="text-left text-gray-700 hover:text-emerald-600 py-2 px-4 transition-colors"
-                >
-                  Sign out
-                </button>
-              </SignedIn>
-
-              <SignedOut>
-                <Link 
-                  to="/sign-in" 
-                  className="text-gray-700 hover:text-emerald-600 py-2 px-4 transition-colors"
-                  onClick={() => setIsMenuOpen(false)}
-                >
-                  Login
-                </Link>
-                <Link 
-                  to="/sign-up" 
-                  className="text-emerald-600 hover:text-emerald-700 py-2 px-4 transition-colors font-medium"
-                  onClick={() => setIsMenuOpen(false)}
-                >
-                  Sign Up
-                </Link>
-              </SignedOut>
-            </div>
+        {/* Mobile menu */}
+        {open && (
+          <div className="md:hidden pb-4 pt-2 border-t border-slate-100 flex flex-col gap-1">
+            <NavLink to="/" end onClick={close} className={linkClass}>Home</NavLink>
+            <NavLink to="/browse" onClick={close} className={linkClass}>Browse</NavLink>
+            <SignedIn>
+              <NavLink to="/dashboard" onClick={close} className={linkClass}>Dashboard</NavLink>
+              <Link to="/create" onClick={close} className={`${solidBtn} text-center mt-2`}>+ Sell item</Link>
+              <button onClick={handleSignOut} className={`${ghostBtn} mt-1`}>Sign out</button>
+            </SignedIn>
+            <SignedOut>
+              <Link to="/sign-in" onClick={close} className={`${ghostBtn} text-center mt-2`}>Login</Link>
+              <Link to="/sign-up" onClick={close} className={`${solidBtn} text-center`}>Sign up</Link>
+            </SignedOut>
           </div>
         )}
       </div>
